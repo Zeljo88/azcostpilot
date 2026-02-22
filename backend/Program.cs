@@ -341,6 +341,12 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
         return Results.Unauthorized();
     }
 
+    var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    var monthStart = new DateOnly(today.Year, today.Month, 1);
+    var monthToDateTotal = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId.Value && x.Date >= monthStart && x.Date <= today)
+        .SumAsync(x => (decimal?)x.Cost, cancellationToken) ?? 0m;
+
     var latestEvent = await db.CostEvents.AsNoTracking()
         .Where(x => x.UserId == userId.Value)
         .OrderByDescending(x => x.Date)
@@ -350,11 +356,12 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
     if (latestEvent is null)
     {
         var empty = new DashboardSummaryResponse(
-            Date: DateOnly.FromDateTime(DateTime.UtcNow.Date),
+            Date: today,
             YesterdayTotal: 0m,
             TodayTotal: 0m,
             Difference: 0m,
             Baseline: 0m,
+            MonthToDateTotal: decimal.Round(monthToDateTotal, 4),
             SpikeFlag: false,
             Confidence: "Low",
             TopCauseResource: null,
@@ -380,6 +387,7 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
         TodayTotal: latestEvent.TotalToday,
         Difference: latestEvent.Difference,
         Baseline: latestEvent.Baseline,
+        MonthToDateTotal: decimal.Round(monthToDateTotal, 4),
         SpikeFlag: latestEvent.SpikeFlag,
         Confidence: confidence,
         TopCauseResource: topCause,

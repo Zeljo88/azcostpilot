@@ -6,6 +6,7 @@ public sealed record DashboardSummaryResponse(
     decimal TodayTotal,
     decimal Difference,
     decimal Baseline,
+    decimal MonthToDateTotal,
     bool SpikeFlag,
     string Confidence,
     DashboardCauseResourceResponse? TopCauseResource,

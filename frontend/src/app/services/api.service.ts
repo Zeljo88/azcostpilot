@@ -43,6 +43,7 @@ export interface DashboardSummaryResponse {
   todayTotal: number;
   difference: number;
   baseline: number;
+  monthToDateTotal: number;
   spikeFlag: boolean;
   confidence: 'High' | 'Medium' | 'Low' | string;
   topCauseResource: DashboardCauseResource | null;
