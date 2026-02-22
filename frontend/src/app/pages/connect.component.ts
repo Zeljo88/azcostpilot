@@ -3,7 +3,12 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { ApiService, AzureConnectionSummary } from '../services/api.service';
+import {
+  ApiService,
+  AzureConnectionSummary,
+  ConnectedSubscription,
+  ConnectAzureResponse
+} from '../services/api.service';
 
 @Component({
   selector: 'app-connect',
@@ -22,6 +27,8 @@ export class ConnectComponent {
   error = '';
   success = '';
   connections: AzureConnectionSummary[] = [];
+  discoveredSubscriptions: ConnectedSubscription[] = [];
+  subscriptionCount = 0;
 
   constructor(private readonly api: ApiService) {}
 
@@ -32,12 +39,16 @@ export class ConnectComponent {
 
     try {
       await this.ensureUserAndToken();
-      await firstValueFrom(this.api.saveAzureConnection(this.tenantId.trim(), this.clientId.trim(), this.clientSecret.trim()));
+      const response: ConnectAzureResponse = await firstValueFrom(
+        this.api.saveAzureConnection(this.tenantId.trim(), this.clientId.trim(), this.clientSecret.trim())
+      );
       this.connections = await firstValueFrom(this.api.getAzureConnections());
-      this.success = `Connected. Stored ${this.connections.length} connection(s).`;
+      this.discoveredSubscriptions = response.subscriptions;
+      this.subscriptionCount = response.subscriptionCount;
+      this.success = `Connected ✅ Found ${this.subscriptionCount} subscription(s). Stored ${this.connections.length} connection(s).`;
       this.clientSecret = '';
     } catch (error: any) {
-      this.error = error?.error?.message ?? 'Could not save Azure connection.';
+      this.error = error?.error?.message ?? 'Could not validate Azure connection.';
     } finally {
       this.saving = false;
     }

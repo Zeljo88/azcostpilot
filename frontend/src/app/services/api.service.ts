@@ -15,6 +15,19 @@ export interface AzureConnectionSummary {
   createdAtUtc: string;
 }
 
+export interface ConnectedSubscription {
+  subscriptionId: string;
+  displayName: string;
+  state: string;
+}
+
+export interface ConnectAzureResponse {
+  connected: boolean;
+  connectionId: string;
+  subscriptionCount: number;
+  subscriptions: ConnectedSubscription[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly baseUrl = 'http://localhost:5168';
@@ -30,9 +43,9 @@ export class ApiService {
     return this.http.post<AuthResponse>(`${this.baseUrl}/auth/login`, { email, password });
   }
 
-  saveAzureConnection(tenantId: string, clientId: string, clientSecret: string): Observable<unknown> {
-    return this.http.post(
-      `${this.baseUrl}/connections/azure`,
+  saveAzureConnection(tenantId: string, clientId: string, clientSecret: string): Observable<ConnectAzureResponse> {
+    return this.http.post<ConnectAzureResponse>(
+      `${this.baseUrl}/connect/azure`,
       { tenantId, clientId, clientSecret },
       { headers: this.authHeaders() }
     );

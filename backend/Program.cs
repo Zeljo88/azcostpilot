@@ -18,6 +18,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ISecretEncryptionService, SecretEncryptionService>();
+builder.Services.AddHttpClient<IAzureSubscriptionDiscoveryService, AzureSubscriptionDiscoveryService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "local-dev-jwt-key-change-me-please";
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
@@ -40,7 +41,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(
         "frontend",
-        policy => policy.WithOrigins("http://localhost:4200")
+        policy => policy.SetIsOriginAllowed(IsAllowedFrontendOrigin)
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
@@ -122,8 +123,10 @@ auth.MapPost("/login", async (LoginRequest request, AppDbContext db, ITokenServi
 
 app.MapGet("/auth/me", (ClaimsPrincipal principal) =>
 {
-    var userIdRaw = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
-    var email = principal.FindFirstValue(JwtRegisteredClaimNames.Email);
+    var userIdRaw = principal.FindFirstValue(JwtRegisteredClaimNames.Sub)
+        ?? principal.FindFirstValue(ClaimTypes.NameIdentifier);
+    var email = principal.FindFirstValue(JwtRegisteredClaimNames.Email)
+        ?? principal.FindFirstValue(ClaimTypes.Email);
     if (string.IsNullOrWhiteSpace(userIdRaw) || !Guid.TryParse(userIdRaw, out var userId))
     {
         return Results.Unauthorized();
@@ -132,9 +135,15 @@ app.MapGet("/auth/me", (ClaimsPrincipal principal) =>
     return Results.Ok(new { userId, email });
 }).RequireAuthorization();
 
-var connections = app.MapGroup("/connections").RequireAuthorization();
+var connect = app.MapGroup("/connect").RequireAuthorization();
 
-connections.MapPost("/azure", async (SaveAzureConnectionRequest request, ClaimsPrincipal principal, AppDbContext db, ISecretEncryptionService secretEncryptionService, CancellationToken cancellationToken) =>
+connect.MapPost("/azure", async (
+    SaveAzureConnectionRequest request,
+    ClaimsPrincipal principal,
+    AppDbContext db,
+    ISecretEncryptionService secretEncryptionService,
+    IAzureSubscriptionDiscoveryService azureSubscriptionDiscoveryService,
+    CancellationToken cancellationToken) =>
 {
     var userId = GetUserId(principal);
     if (userId is null)
@@ -149,8 +158,26 @@ connections.MapPost("/azure", async (SaveAzureConnectionRequest request, ClaimsP
         return Results.BadRequest(new { message = "tenantId, clientId, and clientSecret are required." });
     }
 
+    var tenantId = request.TenantId.Trim();
+    var clientId = request.ClientId.Trim();
+    var clientSecret = request.ClientSecret.Trim();
+
+    IReadOnlyList<AzureSubscriptionInfo> discoveredSubscriptions;
+    try
+    {
+        discoveredSubscriptions = await azureSubscriptionDiscoveryService.ListSubscriptionsAsync(
+            tenantId,
+            clientId,
+            clientSecret,
+            cancellationToken);
+    }
+    catch (AzureConnectionValidationException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+
     var existing = await db.AzureConnections.FirstOrDefaultAsync(
-        x => x.UserId == userId.Value && x.TenantId == request.TenantId && x.ClientId == request.ClientId,
+        x => x.UserId == userId.Value && x.TenantId == tenantId && x.ClientId == clientId,
         cancellationToken);
 
     if (existing is null)
@@ -159,27 +186,47 @@ connections.MapPost("/azure", async (SaveAzureConnectionRequest request, ClaimsP
         {
             Id = Guid.NewGuid(),
             UserId = userId.Value,
-            TenantId = request.TenantId.Trim(),
-            ClientId = request.ClientId.Trim(),
-            EncryptedClientSecret = secretEncryptionService.Encrypt(request.ClientSecret),
+            TenantId = tenantId,
+            ClientId = clientId,
+            EncryptedClientSecret = secretEncryptionService.Encrypt(clientSecret),
             CreatedAtUtc = DateTime.UtcNow
         };
         db.AzureConnections.Add(existing);
     }
     else
     {
-        existing.EncryptedClientSecret = secretEncryptionService.Encrypt(request.ClientSecret);
+        existing.EncryptedClientSecret = secretEncryptionService.Encrypt(clientSecret);
     }
+
+    var existingSubscriptions = await db.Subscriptions
+        .Where(x => x.AzureConnectionId == existing.Id)
+        .ToListAsync(cancellationToken);
+    db.Subscriptions.RemoveRange(existingSubscriptions);
+
+    var createdAtUtc = DateTime.UtcNow;
+    var subscriptionRows = discoveredSubscriptions.Select(subscription => new Subscription
+    {
+        Id = Guid.NewGuid(),
+        UserId = userId.Value,
+        AzureConnectionId = existing.Id,
+        AzureSubscriptionId = subscription.SubscriptionId,
+        DisplayName = subscription.DisplayName,
+        CreatedAtUtc = createdAtUtc
+    });
+    db.Subscriptions.AddRange(subscriptionRows);
 
     await db.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new
-    {
-        connectionId = existing.Id,
-        existing.TenantId,
-        existing.ClientId
-    });
+    return Results.Ok(new ConnectAzureResponse(
+        Connected: true,
+        ConnectionId: existing.Id,
+        SubscriptionCount: discoveredSubscriptions.Count,
+        Subscriptions: discoveredSubscriptions
+            .Select(x => new ConnectedSubscriptionResponse(x.SubscriptionId, x.DisplayName, x.State))
+            .ToList()));
 });
+
+var connections = app.MapGroup("/connections").RequireAuthorization();
 
 connections.MapGet("/azure", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
 {
@@ -202,7 +249,8 @@ app.Run();
 
 static Guid? GetUserId(ClaimsPrincipal principal)
 {
-    var userIdRaw = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+    var userIdRaw = principal.FindFirstValue(JwtRegisteredClaimNames.Sub)
+        ?? principal.FindFirstValue(ClaimTypes.NameIdentifier);
     return Guid.TryParse(userIdRaw, out var userId) ? userId : null;
 }
 
@@ -220,4 +268,19 @@ static async Task ApplyMigrationsAsync(WebApplication app)
     {
         logger.LogWarning(ex, "Database migration was not applied. Start PostgreSQL and retry.");
     }
+}
+
+static bool IsAllowedFrontendOrigin(string? origin)
+{
+    if (string.IsNullOrWhiteSpace(origin) || !Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    var isLoopbackHost = uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
+    var isHttp = uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+        || uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
+
+    return isLoopbackHost && isHttp;
 }

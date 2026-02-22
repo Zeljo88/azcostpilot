@@ -1,19 +1,19 @@
 # Azure Cost Spike Explainer (MVP)
 
-Day 1 scaffold is implemented:
+Day 1 and Day 2 are implemented:
 
 - `backend`: .NET 8 Web API with JWT auth, EF Core, and health endpoints
 - `worker`: .NET 8 Worker Service with DB heartbeat wiring
 - `frontend`: Angular 17 standalone app with `/connect` and `/dashboard`
 - `shared/AzCostPilot.Data`: shared entities + `AppDbContext` + EF migrations
 
-## Day 1 APIs
+## Current APIs
 
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /health`
 - `GET /health/db`
-- `POST /connections/azure` (JWT required)
+- `POST /connect/azure` (JWT required, validates Azure credentials and lists subscriptions)
 - `GET /connections/azure` (JWT required)
 
 ## Local run
