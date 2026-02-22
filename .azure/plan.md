@@ -1,12 +1,12 @@
 # Azure Cost Spike Explainer - Build Plan
 
 ## Status
-- Current phase: Execution (Day 4 completed)
-- Validation status: Day 1-Day 4 build and runtime validation complete
+- Current phase: Execution (Day 5 completed)
+- Validation status: Day 1-Day 5 build and runtime validation complete
 
 ## Scope
 - Build MVP in daily increments (Day 1 to Day 7)
-- Current execution target: Day 5 next
+- Current execution target: Day 6 next
 
 ## Day Plan
 1. Day 1: Scaffold backend, worker, frontend, Postgres schema/migrations, auth mode, health endpoints, Angular routes
@@ -42,3 +42,8 @@
 - Worker computes daily spike baseline and cause extraction, then writes `cost_events`
 - Spike rule implemented: `today > baseline * 1.5` and `difference > 5`
 - API endpoint `GET /dashboard/summary` returns yesterday/today totals, spike flag, top cause resource, and suggestion text
+
+## Day 5 Acceptance
+- Dashboard UI shows yesterday/today totals, baseline, difference, spike badge, main cause resource, and suggestion text
+- Dashboard includes "View in Azure" link built from resource ID
+- Dashboard includes optional history list from last 10 `cost_events`

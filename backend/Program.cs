@@ -362,6 +362,36 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
     return Results.Ok(summary);
 });
 
+dashboard.MapGet("/history", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = GetUserId(principal);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var history = await db.CostEvents.AsNoTracking()
+        .Where(x => x.UserId == userId.Value)
+        .OrderByDescending(x => x.Date)
+        .ThenByDescending(x => x.CreatedAtUtc)
+        .Take(10)
+        .Select(x => new DashboardHistoryItemResponse(
+            x.Date,
+            x.TotalYesterday,
+            x.TotalToday,
+            x.Difference,
+            x.SpikeFlag,
+            x.TopResourceId,
+            x.TopResourceName,
+            x.TopIncreaseAmount,
+            string.IsNullOrWhiteSpace(x.SuggestionText)
+                ? (x.SpikeFlag ? "Spike detected." : "No spike detected.")
+                : x.SuggestionText!))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(history);
+});
+
 app.Run();
 
 static Guid? GetUserId(ClaimsPrincipal principal)

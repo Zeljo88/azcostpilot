@@ -28,6 +28,36 @@ export interface ConnectAzureResponse {
   subscriptions: ConnectedSubscription[];
 }
 
+export interface DashboardCauseResource {
+  resourceId: string;
+  resourceName: string;
+  resourceType: string;
+  increaseAmount: number;
+}
+
+export interface DashboardSummaryResponse {
+  date: string;
+  yesterdayTotal: number;
+  todayTotal: number;
+  difference: number;
+  baseline: number;
+  spikeFlag: boolean;
+  topCauseResource: DashboardCauseResource | null;
+  suggestionText: string;
+}
+
+export interface DashboardHistoryItem {
+  date: string;
+  yesterdayTotal: number;
+  todayTotal: number;
+  difference: number;
+  spikeFlag: boolean;
+  topResourceId: string | null;
+  topResourceName: string | null;
+  topIncreaseAmount: number | null;
+  suggestionText: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly baseUrl = 'http://localhost:5168';
@@ -53,6 +83,18 @@ export class ApiService {
 
   getAzureConnections(): Observable<AzureConnectionSummary[]> {
     return this.http.get<AzureConnectionSummary[]>(`${this.baseUrl}/connections/azure`, {
+      headers: this.authHeaders()
+    });
+  }
+
+  getDashboardSummary(): Observable<DashboardSummaryResponse> {
+    return this.http.get<DashboardSummaryResponse>(`${this.baseUrl}/dashboard/summary`, {
+      headers: this.authHeaders()
+    });
+  }
+
+  getDashboardHistory(): Observable<DashboardHistoryItem[]> {
+    return this.http.get<DashboardHistoryItem[]>(`${this.baseUrl}/dashboard/history`, {
       headers: this.authHeaders()
     });
   }
