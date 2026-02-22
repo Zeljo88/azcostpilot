@@ -26,6 +26,8 @@ export interface ConnectAzureResponse {
   connectionId: string;
   subscriptionCount: number;
   subscriptions: ConnectedSubscription[];
+  backfillCompleted: boolean;
+  backfillMessage: string;
 }
 
 export interface DashboardCauseResource {
@@ -42,6 +44,7 @@ export interface DashboardSummaryResponse {
   difference: number;
   baseline: number;
   spikeFlag: boolean;
+  confidence: 'High' | 'Medium' | 'Low' | string;
   topCauseResource: DashboardCauseResource | null;
   suggestionText: string;
 }
@@ -66,6 +69,17 @@ export interface DashboardWasteFinding {
   estimatedMonthlyCost: number | null;
   detectedAtUtc: string;
   status: string;
+}
+
+export interface SeedSyntheticCostDataResponse {
+  scenario: string;
+  days: number;
+  dailyCostRowsInserted: number;
+  wasteFindingsInserted: number;
+  eventsGenerated: number;
+  fromDate: string;
+  toDate: string;
+  note: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -111,6 +125,27 @@ export class ApiService {
 
   getDashboardWasteFindings(): Observable<DashboardWasteFinding[]> {
     return this.http.get<DashboardWasteFinding[]>(`${this.baseUrl}/dashboard/waste-findings`, {
+      headers: this.authHeaders()
+    });
+  }
+
+  seedSyntheticScenario(
+    scenario: string,
+    days = 30,
+    clearExistingData = true,
+    seed?: number
+  ): Observable<SeedSyntheticCostDataResponse> {
+    const body: { scenario: string; days: number; clearExistingData: boolean; seed?: number } = {
+      scenario,
+      days,
+      clearExistingData
+    };
+
+    if (seed !== undefined) {
+      body.seed = seed;
+    }
+
+    return this.http.post<SeedSyntheticCostDataResponse>(`${this.baseUrl}/dev/seed/cost-scenarios`, body, {
       headers: this.authHeaders()
     });
   }

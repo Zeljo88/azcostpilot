@@ -5,6 +5,7 @@ using AzCostPilot.Api.Contracts;
 using AzCostPilot.Api.Services;
 using AzCostPilot.Data;
 using AzCostPilot.Data.Entities;
+using AzCostPilot.Data.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -13,12 +14,16 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ISecretEncryptionService, SecretEncryptionService>();
+builder.Services.AddScoped<ISecretCipher>(sp => sp.GetRequiredService<ISecretEncryptionService>());
+builder.Services.AddScoped<IDevelopmentScenarioSeeder, DevelopmentScenarioSeeder>();
 builder.Services.AddHttpClient<IAzureSubscriptionDiscoveryService, AzureSubscriptionDiscoveryService>();
+builder.Services.AddHttpClient<ICostSyncService, CostSyncService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "local-dev-jwt-key-change-me-please";
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
@@ -143,6 +148,8 @@ connect.MapPost("/azure", async (
     AppDbContext db,
     ISecretEncryptionService secretEncryptionService,
     IAzureSubscriptionDiscoveryService azureSubscriptionDiscoveryService,
+    ICostSyncService costSyncService,
+    ILoggerFactory loggerFactory,
     CancellationToken cancellationToken) =>
 {
     var userId = GetUserId(principal);
@@ -216,6 +223,21 @@ connect.MapPost("/azure", async (
     db.Subscriptions.AddRange(subscriptionRows);
 
     await db.SaveChangesAsync(cancellationToken);
+    var logger = loggerFactory.CreateLogger("ConnectAzure");
+    var backfillCompleted = true;
+    var backfillMessage = "Initial cost sync completed.";
+    try
+    {
+        var backfill = await costSyncService.RunBackfillAsync(userId.Value, 30, cancellationToken);
+        backfillMessage =
+            $"Initial cost sync completed for {backfill.SubscriptionsProcessed} subscription(s), {backfill.FromDate} to {backfill.ToDate}.";
+    }
+    catch (Exception ex)
+    {
+        backfillCompleted = false;
+        backfillMessage = "Connected, but initial sync failed. Scheduled worker will retry.";
+        logger.LogWarning(ex, "Backfill failed after Azure connect for user {UserId}.", userId.Value);
+    }
 
     return Results.Ok(new ConnectAzureResponse(
         Connected: true,
@@ -223,7 +245,9 @@ connect.MapPost("/azure", async (
         SubscriptionCount: discoveredSubscriptions.Count,
         Subscriptions: discoveredSubscriptions
             .Select(x => new ConnectedSubscriptionResponse(x.SubscriptionId, x.DisplayName, x.State))
-            .ToList()));
+            .ToList(),
+        BackfillCompleted: backfillCompleted,
+        BackfillMessage: backfillMessage));
 });
 
 var connections = app.MapGroup("/connections").RequireAuthorization();
@@ -332,6 +356,7 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
             Difference: 0m,
             Baseline: 0m,
             SpikeFlag: false,
+            Confidence: "Low",
             TopCauseResource: null,
             SuggestionText: "No cost event yet. Run worker ingestion to generate a daily summary.");
         return Results.Ok(empty);
@@ -347,6 +372,8 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
             IncreaseAmount: latestEvent.TopIncreaseAmount.Value);
     }
 
+    var confidence = await CalculateConfidenceAsync(db, userId.Value, latestEvent.Date, cancellationToken);
+
     var summary = new DashboardSummaryResponse(
         Date: latestEvent.Date,
         YesterdayTotal: latestEvent.TotalYesterday,
@@ -354,6 +381,7 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
         Difference: latestEvent.Difference,
         Baseline: latestEvent.Baseline,
         SpikeFlag: latestEvent.SpikeFlag,
+        Confidence: confidence,
         TopCauseResource: topCause,
         SuggestionText: string.IsNullOrWhiteSpace(latestEvent.SuggestionText)
             ? (latestEvent.SpikeFlag ? "Spike detected. Review top cause resource." : "No spike detected today.")
@@ -417,6 +445,49 @@ dashboard.MapGet("/waste-findings", async (ClaimsPrincipal principal, AppDbConte
 
     return Results.Ok(findings);
 });
+
+if (app.Environment.IsDevelopment())
+{
+    var dev = app.MapGroup("/dev").RequireAuthorization();
+
+    dev.MapPost("/seed/cost-scenarios", async (
+        SeedSyntheticCostDataRequest request,
+        ClaimsPrincipal principal,
+        IDevelopmentScenarioSeeder developmentScenarioSeeder,
+        CancellationToken cancellationToken) =>
+    {
+        var userId = GetUserId(principal);
+        if (userId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await developmentScenarioSeeder.SeedAsync(
+                userId: userId.Value,
+                scenario: string.IsNullOrWhiteSpace(request.Scenario) ? "normal" : request.Scenario,
+                days: request.Days,
+                clearExistingData: request.ClearExistingData,
+                seed: request.Seed,
+                cancellationToken: cancellationToken);
+
+            return Results.Ok(new SeedSyntheticCostDataResponse(
+                Scenario: result.Scenario,
+                Days: result.Days,
+                DailyCostRowsInserted: result.DailyCostRowsInserted,
+                WasteFindingsInserted: result.WasteFindingsInserted,
+                EventsGenerated: result.EventsGenerated,
+                FromDate: result.FromDate,
+                ToDate: result.ToDate,
+                Note: result.Note));
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            return Results.BadRequest(new { message = ex.Message });
+        }
+    });
+}
 
 app.Run();
 
@@ -507,4 +578,61 @@ static string ParseResourceType(string resourceId)
     }
 
     return typeSegments.Count == 0 ? provider : $"{provider}/{string.Join("/", typeSegments)}";
+}
+
+static async Task<string> CalculateConfidenceAsync(
+    AppDbContext db,
+    Guid userId,
+    DateOnly eventDate,
+    CancellationToken cancellationToken)
+{
+    var yesterday = eventDate.AddDays(-1);
+    var rows = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId && (x.Date == eventDate || x.Date == yesterday))
+        .Select(x => new { x.Date, x.ResourceId, x.Cost })
+        .ToListAsync(cancellationToken);
+
+    var todayByResource = rows
+        .Where(x => x.Date == eventDate)
+        .GroupBy(x => x.ResourceId)
+        .ToDictionary(group => group.Key, group => group.Sum(x => x.Cost));
+
+    var yesterdayByResource = rows
+        .Where(x => x.Date == yesterday)
+        .GroupBy(x => x.ResourceId)
+        .ToDictionary(group => group.Key, group => group.Sum(x => x.Cost));
+
+    var allResources = todayByResource.Keys
+        .Union(yesterdayByResource.Keys)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    var positiveDeltas = new List<decimal>();
+    foreach (var resourceId in allResources)
+    {
+        var today = todayByResource.TryGetValue(resourceId, out var todayCost) ? todayCost : 0m;
+        var yesterdayCost = yesterdayByResource.TryGetValue(resourceId, out var priorCost) ? priorCost : 0m;
+        var delta = today - yesterdayCost;
+        if (delta > 0m)
+        {
+            positiveDeltas.Add(delta);
+        }
+    }
+
+    if (positiveDeltas.Count == 0)
+    {
+        return "Low";
+    }
+
+    positiveDeltas.Sort((left, right) => right.CompareTo(left));
+    var top = positiveDeltas[0];
+    var second = positiveDeltas.Count > 1 ? positiveDeltas[1] : 0m;
+    var totalPositive = positiveDeltas.Sum();
+    var topShare = totalPositive <= 0m ? 0m : top / totalPositive;
+    var dominant = top >= 5m && (second <= 0m || top >= second * 2m || topShare >= 0.65m);
+    if (dominant)
+    {
+        return "High";
+    }
+
+    return positiveDeltas.Count >= 2 ? "Medium" : "Low";
 }

@@ -7,6 +7,7 @@ public sealed record DashboardSummaryResponse(
     decimal Difference,
     decimal Baseline,
     bool SpikeFlag,
+    string Confidence,
     DashboardCauseResourceResponse? TopCauseResource,
     string SuggestionText);
 

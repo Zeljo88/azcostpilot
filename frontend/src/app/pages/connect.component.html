@@ -1,6 +1,6 @@
 <section class="card">
   <h2>Connect Azure Account</h2>
-  <p class="hint">Day 2 flow: validate service principal by listing subscriptions, then store encrypted secret.</p>
+  <p class="hint">Validate service principal, store encrypted secret, and run immediate 30-day backfill sync.</p>
 
   <form (ngSubmit)="saveConnection()">
     <label>
@@ -34,6 +34,7 @@
   </form>
 
   <p class="success" *ngIf="success">{{ success }}</p>
+  <p class="warning" *ngIf="warning">{{ warning }}</p>
   <p class="error" *ngIf="error">{{ error }}</p>
 
   <div *ngIf="connections.length > 0" class="result">

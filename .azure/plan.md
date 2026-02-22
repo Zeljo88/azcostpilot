@@ -52,3 +52,7 @@
 - Worker scans for `unattached_disk`, `unused_public_ip`, and `stopped_vm` findings via Azure Resource Graph
 - Findings are stored in `waste_findings` with estimated monthly savings (recent-cost-based or heuristic fallback)
 - Dashboard includes an "Easy Savings Found" section with Azure portal links
+
+## Additional Enhancement
+- `POST /connect/azure` now triggers immediate 30-day backfill using shared `CostSyncService`
+- Shared cost sync logic is reused by both API-triggered backfill and scheduled worker runs

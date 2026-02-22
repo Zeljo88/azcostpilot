@@ -13,7 +13,7 @@ Day 1 to Day 6 are implemented:
 - `POST /auth/login`
 - `GET /health`
 - `GET /health/db`
-- `POST /connect/azure` (JWT required, validates Azure credentials and lists subscriptions)
+- `POST /connect/azure` (JWT required, validates Azure credentials, stores subscriptions, and runs immediate 30-day backfill)
 - `GET /connections/azure` (JWT required)
 - `GET /cost/latest-7-days` (JWT required, returns totals + per-resource daily costs)
 - `GET /dashboard/summary` (JWT required, returns yesterday/today totals, spike flag, top cause resource, suggestion)

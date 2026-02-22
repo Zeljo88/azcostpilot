@@ -52,6 +52,11 @@ button:disabled {
   font-weight: 600;
 }
 
+.warning {
+  color: #92400e;
+  font-weight: 600;
+}
+
 .error {
   color: #b91c1c;
   font-weight: 600;

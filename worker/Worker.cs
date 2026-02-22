@@ -1,17 +1,16 @@
+using AzCostPilot.Data.Services;
 using AzCostPilot.Worker.Services;
 
 namespace AzCostPilot.Worker;
 
 public class Worker(
     ILogger<Worker> logger,
-    ICostIngestionService costIngestionService,
-    ICostEventDetectionService costEventDetectionService,
+    ICostSyncService costSyncService,
     IWasteFindingService wasteFindingService,
     IConfiguration configuration) : BackgroundService
 {
     private readonly ILogger<Worker> _logger = logger;
-    private readonly ICostIngestionService _costIngestionService = costIngestionService;
-    private readonly ICostEventDetectionService _costEventDetectionService = costEventDetectionService;
+    private readonly ICostSyncService _costSyncService = costSyncService;
     private readonly IWasteFindingService _wasteFindingService = wasteFindingService;
     private readonly TimeSpan _runInterval = TimeSpan.FromHours(Math.Max(1, configuration.GetValue<int?>("Worker:RunIntervalHours") ?? 24));
 
@@ -23,8 +22,8 @@ public class Worker(
         {
             try
             {
-                var processedSubscriptions = await _costIngestionService.IngestLast7DaysAsync(stoppingToken);
-                var generatedEvents = await _costEventDetectionService.GenerateDailyEventsAsync(stoppingToken);
+                var processedSubscriptions = await _costSyncService.SyncCostsAsync(7, null, stoppingToken);
+                var generatedEvents = await _costSyncService.GenerateCostEventsAsync(7, null, stoppingToken);
                 var wasteFindings = await _wasteFindingService.RefreshWasteFindingsAsync(stoppingToken);
                 _logger.LogInformation(
                     "Worker run complete. Subscriptions processed: {Subscriptions}. Cost events generated: {Events}. Waste findings: {WasteFindings}.",

@@ -14,9 +14,14 @@
       <h2>Cost Summary for {{ vm.date }}</h2>
       <p class="subtitle">Saved Azure connections: {{ connectionCount }}</p>
     </div>
-    <span class="badge" [class.badge-spike]="vm.spikeFlag" [class.badge-safe]="!vm.spikeFlag">
-      {{ vm.spikeFlag ? 'Spike Detected' : 'No Spike Today' }}
-    </span>
+    <div class="hero-badges">
+      <span class="badge" [class.badge-spike]="vm.spikeFlag" [class.badge-safe]="!vm.spikeFlag">
+        {{ vm.spikeFlag ? 'Spike Detected' : 'No Spike Today' }}
+      </span>
+      <span class="confidence" [ngClass]="getConfidenceClass(vm.confidence)">
+        Confidence: {{ vm.confidence }}
+      </span>
+    </div>
   </section>
 
   <section class="metrics-grid">
@@ -40,24 +45,46 @@
     </article>
   </section>
 
+  <section class="dev-scenarios">
+    <h3>Development Scenarios</h3>
+    <p class="dev-scenarios-subtitle">Seed synthetic data to test dashboard behavior quickly.</p>
+    <div class="scenario-grid">
+      <article class="scenario-card" *ngFor="let scenario of devScenarios">
+        <strong>{{ scenario.label }}</strong>
+        <p>{{ scenario.description }}</p>
+        <button
+          type="button"
+          (click)="seedScenario(scenario.key)"
+          [disabled]="seedingScenario !== null"
+        >
+          {{ seedingScenario === scenario.key ? 'Seeding...' : 'Seed Scenario' }}
+        </button>
+      </article>
+    </div>
+    <p class="dev-message success" *ngIf="seedMessage">{{ seedMessage }}</p>
+    <p class="dev-message error" *ngIf="seedError">{{ seedError }}</p>
+  </section>
+
   <section class="explanation">
     <article class="cause">
       <h3>Main Cause</h3>
       <ng-container *ngIf="getTopCause() as cause; else noCause">
         <p class="resource-name">{{ cause.resourceName }}</p>
-        <p class="resource-id">{{ cause.resourceId }}</p>
+        <p class="resource-meta">Resource Group: {{ getResourceGroup(cause.resourceId) }}</p>
+        <p class="resource-meta">Type: {{ getFriendlyResourceType(cause.resourceId) }}</p>
         <p class="increase">Increase: {{ formatCurrency(cause.increaseAmount) }}</p>
         <a
           *ngIf="buildAzurePortalUrl(cause.resourceId) as portalUrl"
           [href]="portalUrl"
           target="_blank"
           rel="noopener"
+          [title]="cause.resourceId"
         >
           View in Azure
         </a>
       </ng-container>
       <ng-template #noCause>
-        <p>No single positive resource increase was found for today.</p>
+        <p>No unusual cost changes detected today.</p>
       </ng-template>
     </article>
 
@@ -69,6 +96,7 @@
 
   <section class="savings" *ngIf="wasteFindings.length > 0">
     <h3>Easy Savings Found</h3>
+    <p class="savings-subtitle">We found resources that may be costing money unnecessarily.</p>
     <ul>
       <li *ngFor="let finding of wasteFindings">
         <div class="finding-head">
@@ -78,12 +106,14 @@
           </span>
         </div>
         <p class="resource-name">{{ finding.resourceName }}</p>
-        <p class="resource-id">{{ finding.resourceId }}</p>
+        <p class="resource-meta">Resource Group: {{ getResourceGroup(finding.resourceId) }}</p>
+        <p class="resource-meta">Type: {{ getFriendlyResourceType(finding.resourceId) }}</p>
         <a
           *ngIf="buildAzurePortalUrl(finding.resourceId) as portalUrl"
           [href]="portalUrl"
           target="_blank"
           rel="noopener"
+          [title]="finding.resourceId"
         >
           View in Azure
         </a>
