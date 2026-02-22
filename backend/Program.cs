@@ -307,6 +307,61 @@ cost.MapGet("/latest-7-days", async (ClaimsPrincipal principal, AppDbContext db,
     return Results.Ok(response);
 });
 
+var dashboard = app.MapGroup("/dashboard").RequireAuthorization();
+
+dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = GetUserId(principal);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var latestEvent = await db.CostEvents.AsNoTracking()
+        .Where(x => x.UserId == userId.Value)
+        .OrderByDescending(x => x.Date)
+        .ThenByDescending(x => x.CreatedAtUtc)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (latestEvent is null)
+    {
+        var empty = new DashboardSummaryResponse(
+            Date: DateOnly.FromDateTime(DateTime.UtcNow.Date),
+            YesterdayTotal: 0m,
+            TodayTotal: 0m,
+            Difference: 0m,
+            Baseline: 0m,
+            SpikeFlag: false,
+            TopCauseResource: null,
+            SuggestionText: "No cost event yet. Run worker ingestion to generate a daily summary.");
+        return Results.Ok(empty);
+    }
+
+    DashboardCauseResourceResponse? topCause = null;
+    if (!string.IsNullOrWhiteSpace(latestEvent.TopResourceId) && latestEvent.TopIncreaseAmount is not null)
+    {
+        topCause = new DashboardCauseResourceResponse(
+            ResourceId: latestEvent.TopResourceId,
+            ResourceName: latestEvent.TopResourceName ?? ParseResourceName(latestEvent.TopResourceId),
+            ResourceType: latestEvent.TopResourceType ?? ParseResourceType(latestEvent.TopResourceId),
+            IncreaseAmount: latestEvent.TopIncreaseAmount.Value);
+    }
+
+    var summary = new DashboardSummaryResponse(
+        Date: latestEvent.Date,
+        YesterdayTotal: latestEvent.TotalYesterday,
+        TodayTotal: latestEvent.TotalToday,
+        Difference: latestEvent.Difference,
+        Baseline: latestEvent.Baseline,
+        SpikeFlag: latestEvent.SpikeFlag,
+        TopCauseResource: topCause,
+        SuggestionText: string.IsNullOrWhiteSpace(latestEvent.SuggestionText)
+            ? (latestEvent.SpikeFlag ? "Spike detected. Review top cause resource." : "No spike detected today.")
+            : latestEvent.SuggestionText);
+
+    return Results.Ok(summary);
+});
+
 app.Run();
 
 static Guid? GetUserId(ClaimsPrincipal principal)
@@ -361,4 +416,39 @@ static string ResolveCurrency(IEnumerable<string> currencies)
         1 => distinct[0],
         _ => "MIXED"
     };
+}
+
+static string ParseResourceName(string resourceId)
+{
+    if (string.IsNullOrWhiteSpace(resourceId))
+    {
+        return "Unknown Resource";
+    }
+
+    var parts = resourceId.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    return parts.Length == 0 ? "Unknown Resource" : parts[^1];
+}
+
+static string ParseResourceType(string resourceId)
+{
+    if (string.IsNullOrWhiteSpace(resourceId))
+    {
+        return "unknown";
+    }
+
+    var parts = resourceId.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var providerIndex = Array.FindIndex(parts, part => part.Equals("providers", StringComparison.OrdinalIgnoreCase));
+    if (providerIndex < 0 || providerIndex + 1 >= parts.Length)
+    {
+        return "unknown";
+    }
+
+    var provider = parts[providerIndex + 1];
+    var typeSegments = new List<string>();
+    for (var index = providerIndex + 2; index < parts.Length; index += 2)
+    {
+        typeSegments.Add(parts[index]);
+    }
+
+    return typeSegments.Count == 0 ? provider : $"{provider}/{string.Join("/", typeSegments)}";
 }
