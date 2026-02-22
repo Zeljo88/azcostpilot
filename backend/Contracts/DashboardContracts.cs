@@ -7,6 +7,7 @@ public sealed record DashboardSummaryResponse(
     decimal Difference,
     decimal Baseline,
     bool SpikeFlag,
+    string Confidence,
     DashboardCauseResourceResponse? TopCauseResource,
     string SuggestionText);
 
@@ -22,7 +23,14 @@ public sealed record DashboardHistoryItemResponse(
     decimal TodayTotal,
     decimal Difference,
     bool SpikeFlag,
-    string? TopResourceId,
     string? TopResourceName,
-    decimal? TopIncreaseAmount,
-    string SuggestionText);
+    decimal? TopIncreaseAmount);
+
+public sealed record DashboardWasteFindingResponse(
+    string FindingType,
+    string ResourceId,
+    string ResourceName,
+    string AzureSubscriptionId,
+    decimal? EstimatedMonthlyCost,
+    DateTime DetectedAtUtc,
+    string Status);

@@ -1,9 +1,9 @@
 # Azure Cost Spike Explainer (MVP)
 
-Day 1 to Day 5 are implemented:
+Day 1 to Day 6 are implemented:
 
 - `backend`: .NET 8 Web API with JWT auth, EF Core, and health endpoints
-- `worker`: .NET 8 Worker Service with daily cost ingestion plus spike detection and cost event generation
+- `worker`: .NET 8 Worker Service with cost ingestion, spike detection, and waste finding scans
 - `frontend`: Angular 17 standalone app with `/connect` and `/dashboard`
 - `shared/AzCostPilot.Data`: shared entities + `AppDbContext` + EF migrations
 
@@ -13,11 +13,12 @@ Day 1 to Day 5 are implemented:
 - `POST /auth/login`
 - `GET /health`
 - `GET /health/db`
-- `POST /connect/azure` (JWT required, validates Azure credentials and lists subscriptions)
+- `POST /connect/azure` (JWT required, validates Azure credentials, stores subscriptions, and runs immediate 30-day backfill)
 - `GET /connections/azure` (JWT required)
 - `GET /cost/latest-7-days` (JWT required, returns totals + per-resource daily costs)
 - `GET /dashboard/summary` (JWT required, returns yesterday/today totals, spike flag, top cause resource, suggestion)
 - `GET /dashboard/history` (JWT required, returns last 10 cost events)
+- `GET /dashboard/waste-findings` (JWT required, returns easy-savings findings)
 
 ## Local run
 

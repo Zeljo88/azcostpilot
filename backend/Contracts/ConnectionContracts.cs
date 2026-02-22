@@ -8,6 +8,8 @@ public sealed record ConnectAzureResponse(
     bool Connected,
     Guid ConnectionId,
     int SubscriptionCount,
-    List<ConnectedSubscriptionResponse> Subscriptions);
+    List<ConnectedSubscriptionResponse> Subscriptions,
+    bool BackfillCompleted,
+    string BackfillMessage);
 
 public sealed record ConnectedSubscriptionResponse(string SubscriptionId, string DisplayName, string State);

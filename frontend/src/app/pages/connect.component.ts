@@ -26,6 +26,7 @@ export class ConnectComponent {
   saving = false;
   error = '';
   success = '';
+  warning = '';
   connections: AzureConnectionSummary[] = [];
   discoveredSubscriptions: ConnectedSubscription[] = [];
   subscriptionCount = 0;
@@ -35,6 +36,7 @@ export class ConnectComponent {
   async saveConnection(): Promise<void> {
     this.error = '';
     this.success = '';
+    this.warning = '';
     this.saving = true;
 
     try {
@@ -46,6 +48,11 @@ export class ConnectComponent {
       this.discoveredSubscriptions = response.subscriptions;
       this.subscriptionCount = response.subscriptionCount;
       this.success = `Connected ✅ Found ${this.subscriptionCount} subscription(s). Stored ${this.connections.length} connection(s).`;
+      if (response.backfillCompleted) {
+        this.success = `${this.success} ${response.backfillMessage}`;
+      } else {
+        this.warning = response.backfillMessage;
+      }
       this.clientSecret = '';
     } catch (error: any) {
       this.error = error?.error?.message ?? 'Could not validate Azure connection.';

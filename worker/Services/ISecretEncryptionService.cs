@@ -1,6 +1,7 @@
+using AzCostPilot.Data.Services;
+
 namespace AzCostPilot.Worker.Services;
 
-public interface ISecretEncryptionService
+public interface ISecretEncryptionService : ISecretCipher
 {
-    string Decrypt(string cipherText);
 }
