@@ -1,6 +1,6 @@
 <section class="card">
   <h2>Connect Azure Account</h2>
-  <p class="hint">Day 1 flow: create/login user, then store encrypted service principal secret.</p>
+  <p class="hint">Day 2 flow: validate service principal by listing subscriptions, then store encrypted secret.</p>
 
   <form (ngSubmit)="saveConnection()">
     <label>
@@ -41,6 +41,15 @@
     <ul>
       <li *ngFor="let connection of connections">
         {{ connection.tenantId }} / {{ connection.clientId }}
+      </li>
+    </ul>
+  </div>
+
+  <div *ngIf="discoveredSubscriptions.length > 0" class="result">
+    <h3>Discovered Subscriptions ({{ subscriptionCount }})</h3>
+    <ul>
+      <li *ngFor="let subscription of discoveredSubscriptions">
+        {{ subscription.displayName }} ({{ subscription.subscriptionId }})
       </li>
     </ul>
   </div>
