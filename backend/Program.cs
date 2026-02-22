@@ -392,6 +392,32 @@ dashboard.MapGet("/history", async (ClaimsPrincipal principal, AppDbContext db, 
     return Results.Ok(history);
 });
 
+dashboard.MapGet("/waste-findings", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = GetUserId(principal);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var findings = await db.WasteFindings.AsNoTracking()
+        .Where(x => x.UserId == userId.Value)
+        .OrderByDescending(x => x.EstimatedMonthlyCost ?? 0m)
+        .ThenByDescending(x => x.DetectedAtUtc)
+        .Take(100)
+        .Select(x => new DashboardWasteFindingResponse(
+            x.FindingType,
+            x.ResourceId,
+            x.ResourceName,
+            x.AzureSubscriptionId,
+            x.EstimatedMonthlyCost,
+            x.DetectedAtUtc,
+            x.Status))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(findings);
+});
+
 app.Run();
 
 static Guid? GetUserId(ClaimsPrincipal principal)

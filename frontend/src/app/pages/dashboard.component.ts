@@ -5,7 +5,8 @@ import {
   ApiService,
   DashboardCauseResource,
   DashboardHistoryItem,
-  DashboardSummaryResponse
+  DashboardSummaryResponse,
+  DashboardWasteFinding
 } from '../services/api.service';
 
 @Component({
@@ -21,6 +22,7 @@ export class DashboardComponent implements OnInit {
   error = '';
   summary: DashboardSummaryResponse | null = null;
   history: DashboardHistoryItem[] = [];
+  wasteFindings: DashboardWasteFinding[] = [];
 
   constructor(private readonly api: ApiService) {}
 
@@ -32,14 +34,16 @@ export class DashboardComponent implements OnInit {
     }
 
     try {
-      const [connections, summary, history] = await Promise.all([
+      const [connections, summary, history, wasteFindings] = await Promise.all([
         firstValueFrom(this.api.getAzureConnections()),
         firstValueFrom(this.api.getDashboardSummary()),
-        firstValueFrom(this.api.getDashboardHistory())
+        firstValueFrom(this.api.getDashboardHistory()),
+        firstValueFrom(this.api.getDashboardWasteFindings())
       ]);
       this.connectionCount = connections.length;
       this.summary = summary;
       this.history = history;
+      this.wasteFindings = wasteFindings;
     } catch {
       this.error = 'Could not load dashboard data. Check API and token.';
     } finally {
@@ -58,6 +62,19 @@ export class DashboardComponent implements OnInit {
 
   getTopCause(): DashboardCauseResource | null {
     return this.summary?.topCauseResource ?? null;
+  }
+
+  formatFindingType(value: string): string {
+    switch (value) {
+      case 'unattached_disk':
+        return 'Unattached Disk';
+      case 'unused_public_ip':
+        return 'Unused Public IP';
+      case 'stopped_vm':
+        return 'Stopped VM';
+      default:
+        return value.replaceAll('_', ' ');
+    }
   }
 
   buildAzurePortalUrl(resourceId: string | null | undefined): string | null {

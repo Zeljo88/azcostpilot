@@ -58,6 +58,16 @@ export interface DashboardHistoryItem {
   suggestionText: string;
 }
 
+export interface DashboardWasteFinding {
+  findingType: string;
+  resourceId: string;
+  resourceName: string;
+  azureSubscriptionId: string;
+  estimatedMonthlyCost: number | null;
+  detectedAtUtc: string;
+  status: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly baseUrl = 'http://localhost:5168';
@@ -95,6 +105,12 @@ export class ApiService {
 
   getDashboardHistory(): Observable<DashboardHistoryItem[]> {
     return this.http.get<DashboardHistoryItem[]>(`${this.baseUrl}/dashboard/history`, {
+      headers: this.authHeaders()
+    });
+  }
+
+  getDashboardWasteFindings(): Observable<DashboardWasteFinding[]> {
+    return this.http.get<DashboardWasteFinding[]>(`${this.baseUrl}/dashboard/waste-findings`, {
       headers: this.authHeaders()
     });
   }

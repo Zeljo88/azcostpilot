@@ -1,12 +1,12 @@
 # Azure Cost Spike Explainer - Build Plan
 
 ## Status
-- Current phase: Execution (Day 5 completed)
-- Validation status: Day 1-Day 5 build and runtime validation complete
+- Current phase: Execution (Day 6 completed)
+- Validation status: Day 1-Day 6 build and runtime validation complete
 
 ## Scope
 - Build MVP in daily increments (Day 1 to Day 7)
-- Current execution target: Day 6 next
+- Current execution target: Day 7 next
 
 ## Day Plan
 1. Day 1: Scaffold backend, worker, frontend, Postgres schema/migrations, auth mode, health endpoints, Angular routes
@@ -47,3 +47,8 @@
 - Dashboard UI shows yesterday/today totals, baseline, difference, spike badge, main cause resource, and suggestion text
 - Dashboard includes "View in Azure" link built from resource ID
 - Dashboard includes optional history list from last 10 `cost_events`
+
+## Day 6 Acceptance
+- Worker scans for `unattached_disk`, `unused_public_ip`, and `stopped_vm` findings via Azure Resource Graph
+- Findings are stored in `waste_findings` with estimated monthly savings (recent-cost-based or heuristic fallback)
+- Dashboard includes an "Easy Savings Found" section with Azure portal links

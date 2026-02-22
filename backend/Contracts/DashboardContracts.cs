@@ -26,3 +26,12 @@ public sealed record DashboardHistoryItemResponse(
     string? TopResourceName,
     decimal? TopIncreaseAmount,
     string SuggestionText);
+
+public sealed record DashboardWasteFindingResponse(
+    string FindingType,
+    string ResourceId,
+    string ResourceName,
+    string AzureSubscriptionId,
+    decimal? EstimatedMonthlyCost,
+    DateTime DetectedAtUtc,
+    string Status);

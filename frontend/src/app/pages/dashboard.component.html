@@ -67,6 +67,30 @@
     </article>
   </section>
 
+  <section class="savings" *ngIf="wasteFindings.length > 0">
+    <h3>Easy Savings Found</h3>
+    <ul>
+      <li *ngFor="let finding of wasteFindings">
+        <div class="finding-head">
+          <strong>{{ formatFindingType(finding.findingType) }}</strong>
+          <span class="saving-amount" *ngIf="finding.estimatedMonthlyCost !== null">
+            {{ formatCurrency(finding.estimatedMonthlyCost) }}/mo
+          </span>
+        </div>
+        <p class="resource-name">{{ finding.resourceName }}</p>
+        <p class="resource-id">{{ finding.resourceId }}</p>
+        <a
+          *ngIf="buildAzurePortalUrl(finding.resourceId) as portalUrl"
+          [href]="portalUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          View in Azure
+        </a>
+      </li>
+    </ul>
+  </section>
+
   <section class="history" *ngIf="history.length > 0">
     <h3>Recent Events</h3>
     <ul>

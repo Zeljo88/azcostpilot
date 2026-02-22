@@ -137,6 +137,46 @@
   margin-top: 14px;
 }
 
+.savings {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+}
+
+.savings h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.savings ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.savings li {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.finding-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.saving-amount {
+  color: #166534;
+  font-weight: 700;
+}
+
 .history ul {
   margin: 0;
   padding: 0;

@@ -8,6 +8,7 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
 builder.Services.AddHttpClient<ICostIngestionService, CostIngestionService>();
+builder.Services.AddHttpClient<IWasteFindingService, WasteFindingService>();
 builder.Services.AddSingleton<ICostEventDetectionService, CostEventDetectionService>();
 builder.Services.AddHostedService<Worker>();
 
