@@ -1,29 +1,32 @@
-using AzCostPilot.Data;
-using Microsoft.EntityFrameworkCore;
+using AzCostPilot.Worker.Services;
 
 namespace AzCostPilot.Worker;
 
-public class Worker(ILogger<Worker> logger, IDbContextFactory<AppDbContext> dbContextFactory) : BackgroundService
+public class Worker(
+    ILogger<Worker> logger,
+    ICostIngestionService costIngestionService,
+    IConfiguration configuration) : BackgroundService
 {
     private readonly ILogger<Worker> _logger = logger;
-    private readonly IDbContextFactory<AppDbContext> _dbContextFactory = dbContextFactory;
+    private readonly ICostIngestionService _costIngestionService = costIngestionService;
+    private readonly TimeSpan _runInterval = TimeSpan.FromHours(Math.Max(1, configuration.GetValue<int?>("Worker:RunIntervalHours") ?? 24));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Cost worker started. Run interval: {Hours} hour(s).", _runInterval.TotalHours);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await using var db = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-                var canConnect = await db.Database.CanConnectAsync(stoppingToken);
-                _logger.LogInformation("Worker heartbeat at {time}. DB connected: {connected}", DateTimeOffset.UtcNow, canConnect);
+                await _costIngestionService.IngestLast7DaysAsync(stoppingToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Worker heartbeat failed.");
+                _logger.LogError(ex, "Worker ingestion run failed.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            await Task.Delay(_runInterval, stoppingToken);
         }
     }
 }

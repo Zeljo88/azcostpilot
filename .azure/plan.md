@@ -1,12 +1,12 @@
 # Azure Cost Spike Explainer - Build Plan
 
 ## Status
-- Current phase: Execution (Day 1 completed)
-- Validation status: Partial (compile/build complete, DB runtime validation pending local PostgreSQL)
+- Current phase: Execution (Day 3 completed)
+- Validation status: Day 1-Day 3 build and runtime validation complete
 
 ## Scope
 - Build MVP in daily increments (Day 1 to Day 7)
-- Current execution target: Day 1 only
+- Current execution target: Day 4 next
 
 ## Day Plan
 1. Day 1: Scaffold backend, worker, frontend, Postgres schema/migrations, auth mode, health endpoints, Angular routes
@@ -28,3 +28,12 @@
 - Frontend routes `/connect` and `/dashboard` render
 - API health endpoints return success
 - Database contains `users` and `azure_connections` records via API flow
+
+## Day 2 Acceptance
+- `POST /connect/azure` validates service principal credentials using Azure Management token flow
+- Subscriptions are fetched and stored in `subscriptions`
+- Connect UI shows connected status and subscription count
+
+## Day 3 Acceptance
+- Worker ingests last 7 days of daily cost by resource into `daily_cost_resource`
+- API endpoint `GET /cost/latest-7-days` returns totals and per-resource costs for authenticated user

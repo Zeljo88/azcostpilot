@@ -1,9 +1,9 @@
 # Azure Cost Spike Explainer (MVP)
 
-Day 1 and Day 2 are implemented:
+Day 1 to Day 3 are implemented:
 
 - `backend`: .NET 8 Web API with JWT auth, EF Core, and health endpoints
-- `worker`: .NET 8 Worker Service with DB heartbeat wiring
+- `worker`: .NET 8 Worker Service with daily cost ingestion (last 7 days by resource)
 - `frontend`: Angular 17 standalone app with `/connect` and `/dashboard`
 - `shared/AzCostPilot.Data`: shared entities + `AppDbContext` + EF migrations
 
@@ -15,6 +15,7 @@ Day 1 and Day 2 are implemented:
 - `GET /health/db`
 - `POST /connect/azure` (JWT required, validates Azure credentials and lists subscriptions)
 - `GET /connections/azure` (JWT required)
+- `GET /cost/latest-7-days` (JWT required, returns totals + per-resource daily costs)
 
 ## Local run
 

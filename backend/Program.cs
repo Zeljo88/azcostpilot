@@ -245,6 +245,68 @@ connections.MapGet("/azure", async (ClaimsPrincipal principal, AppDbContext db, 
     return Results.Ok(rows);
 });
 
+var cost = app.MapGroup("/cost").RequireAuthorization();
+
+cost.MapGet("/latest-7-days", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = GetUserId(principal);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var toDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    var fromDate = toDate.AddDays(-6);
+    var rows = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId.Value && x.Date >= fromDate && x.Date <= toDate)
+        .OrderBy(x => x.Date)
+        .ToListAsync(cancellationToken);
+
+    var totalCurrency = ResolveCurrency(rows.Select(x => x.Currency));
+    var dailyTotalsByDate = rows
+        .GroupBy(x => x.Date)
+        .ToDictionary(
+            group => group.Key,
+            group => new Latest7DaysDailyTotalResponse(
+                group.Key,
+                decimal.Round(group.Sum(x => x.Cost), 4),
+                ResolveCurrency(group.Select(x => x.Currency))));
+    var dailyTotals = Enumerable.Range(0, 7)
+        .Select(offset =>
+        {
+            var date = fromDate.AddDays(offset);
+            return dailyTotalsByDate.TryGetValue(date, out var existing)
+                ? existing
+                : new Latest7DaysDailyTotalResponse(date, 0m, totalCurrency);
+        })
+        .ToList();
+
+    var resources = rows
+        .GroupBy(x => x.ResourceId)
+        .Select(group => new Latest7DaysResourceCostResponse(
+            group.Key,
+            decimal.Round(group.Sum(x => x.Cost), 4),
+            ResolveCurrency(group.Select(x => x.Currency)),
+            group.GroupBy(x => x.Date)
+                .Select(dateGroup => new Latest7DaysResourceDailyCostResponse(
+                    dateGroup.Key,
+                    decimal.Round(dateGroup.Sum(x => x.Cost), 4)))
+                .OrderBy(x => x.Date)
+                .ToList()))
+        .OrderByDescending(x => x.TotalCost)
+        .ToList();
+
+    var response = new Latest7DaysCostResponse(
+        FromDate: fromDate,
+        ToDate: toDate,
+        TotalCost: decimal.Round(rows.Sum(x => x.Cost), 4),
+        Currency: totalCurrency,
+        DailyTotals: dailyTotals,
+        Resources: resources);
+
+    return Results.Ok(response);
+});
+
 app.Run();
 
 static Guid? GetUserId(ClaimsPrincipal principal)
@@ -283,4 +345,20 @@ static bool IsAllowedFrontendOrigin(string? origin)
         || uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
 
     return isLoopbackHost && isHttp;
+}
+
+static string ResolveCurrency(IEnumerable<string> currencies)
+{
+    var distinct = currencies
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Select(x => x.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    return distinct.Count switch
+    {
+        0 => "USD",
+        1 => distinct[0],
+        _ => "MIXED"
+    };
 }
