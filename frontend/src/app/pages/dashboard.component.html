@@ -1,26 +1,88 @@
-<section class="grid">
-  <article class="tile">
-    <h3>Yesterday Cost</h3>
-    <p>$0.00</p>
-  </article>
-
-  <article class="tile">
-    <h3>Today Cost</h3>
-    <p>$0.00</p>
-  </article>
-
-  <article class="tile">
-    <h3>Spike Status</h3>
-    <p>Not evaluated yet</p>
-  </article>
-
-  <article class="tile">
-    <h3>Main Cause Resource</h3>
-    <p>Pending worker ingestion</p>
-  </article>
+<section class="state-card" *ngIf="loading">
+  <h2>Loading dashboard...</h2>
+  <p>Reading latest cost event and history.</p>
 </section>
 
-<section class="meta">
-  <p>Saved Azure connections: {{ connectionCount }}</p>
-  <p class="error" *ngIf="error">{{ error }}</p>
+<section class="state-card error" *ngIf="!loading && error">
+  <h2>Dashboard unavailable</h2>
+  <p>{{ error }}</p>
 </section>
+
+<ng-container *ngIf="!loading && !error && summary as vm">
+  <section class="hero">
+    <div>
+      <h2>Cost Summary for {{ vm.date }}</h2>
+      <p class="subtitle">Saved Azure connections: {{ connectionCount }}</p>
+    </div>
+    <span class="badge" [class.badge-spike]="vm.spikeFlag" [class.badge-safe]="!vm.spikeFlag">
+      {{ vm.spikeFlag ? 'Spike Detected' : 'No Spike Today' }}
+    </span>
+  </section>
+
+  <section class="metrics-grid">
+    <article class="metric">
+      <h3>Yesterday Cost</h3>
+      <p>{{ formatCurrency(vm.yesterdayTotal) }}</p>
+    </article>
+    <article class="metric">
+      <h3>Today Cost</h3>
+      <p>{{ formatCurrency(vm.todayTotal) }}</p>
+    </article>
+    <article class="metric">
+      <h3>Difference</h3>
+      <p [class.positive]="vm.difference > 0" [class.negative]="vm.difference < 0">
+        {{ formatCurrency(vm.difference) }}
+      </p>
+    </article>
+    <article class="metric">
+      <h3>7-Day Baseline</h3>
+      <p>{{ formatCurrency(vm.baseline) }}</p>
+    </article>
+  </section>
+
+  <section class="explanation">
+    <article class="cause">
+      <h3>Main Cause</h3>
+      <ng-container *ngIf="getTopCause() as cause; else noCause">
+        <p class="resource-name">{{ cause.resourceName }}</p>
+        <p class="resource-id">{{ cause.resourceId }}</p>
+        <p class="increase">Increase: {{ formatCurrency(cause.increaseAmount) }}</p>
+        <a
+          *ngIf="buildAzurePortalUrl(cause.resourceId) as portalUrl"
+          [href]="portalUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          View in Azure
+        </a>
+      </ng-container>
+      <ng-template #noCause>
+        <p>No single positive resource increase was found for today.</p>
+      </ng-template>
+    </article>
+
+    <article class="suggestion">
+      <h3>Suggestion</h3>
+      <p>{{ vm.suggestionText }}</p>
+    </article>
+  </section>
+
+  <section class="history" *ngIf="history.length > 0">
+    <h3>Recent Events</h3>
+    <ul>
+      <li *ngFor="let event of history">
+        <div>
+          <strong>{{ event.date }}</strong>
+          <span class="history-chip" [class.history-chip-spike]="event.spikeFlag">
+            {{ event.spikeFlag ? 'Spike' : 'No Spike' }}
+          </span>
+        </div>
+        <p>
+          {{ formatCurrency(event.yesterdayTotal) }} -> {{ formatCurrency(event.todayTotal) }}
+          ({{ formatCurrency(event.difference) }})
+        </p>
+        <p *ngIf="event.topResourceName">Top: {{ event.topResourceName }}</p>
+      </li>
+    </ul>
+  </section>
+</ng-container>

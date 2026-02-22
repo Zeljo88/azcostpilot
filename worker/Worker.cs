@@ -5,10 +5,12 @@ namespace AzCostPilot.Worker;
 public class Worker(
     ILogger<Worker> logger,
     ICostIngestionService costIngestionService,
+    ICostEventDetectionService costEventDetectionService,
     IConfiguration configuration) : BackgroundService
 {
     private readonly ILogger<Worker> _logger = logger;
     private readonly ICostIngestionService _costIngestionService = costIngestionService;
+    private readonly ICostEventDetectionService _costEventDetectionService = costEventDetectionService;
     private readonly TimeSpan _runInterval = TimeSpan.FromHours(Math.Max(1, configuration.GetValue<int?>("Worker:RunIntervalHours") ?? 24));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -19,7 +21,12 @@ public class Worker(
         {
             try
             {
-                await _costIngestionService.IngestLast7DaysAsync(stoppingToken);
+                var processedSubscriptions = await _costIngestionService.IngestLast7DaysAsync(stoppingToken);
+                var generatedEvents = await _costEventDetectionService.GenerateDailyEventsAsync(stoppingToken);
+                _logger.LogInformation(
+                    "Worker run complete. Subscriptions processed: {Subscriptions}. Cost events generated: {Events}.",
+                    processedSubscriptions,
+                    generatedEvents);
             }
             catch (Exception ex)
             {
