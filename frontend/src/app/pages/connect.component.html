@@ -1,0 +1,49 @@
+<section class="card">
+  <h2>Connect Azure Account</h2>
+  <p class="hint">Day 1 flow: create/login user, then store encrypted service principal secret.</p>
+
+  <form (ngSubmit)="saveConnection()">
+    <label>
+      Email
+      <input name="email" [(ngModel)]="email" type="email" required />
+    </label>
+
+    <label>
+      Password
+      <input name="password" [(ngModel)]="password" type="password" required />
+    </label>
+
+    <label>
+      Tenant ID
+      <input name="tenantId" [(ngModel)]="tenantId" type="text" required />
+    </label>
+
+    <label>
+      Client ID
+      <input name="clientId" [(ngModel)]="clientId" type="text" required />
+    </label>
+
+    <label>
+      Client Secret
+      <input name="clientSecret" [(ngModel)]="clientSecret" type="password" required />
+    </label>
+
+    <button type="submit" [disabled]="saving">
+      {{ saving ? 'Saving...' : 'Connect' }}
+    </button>
+  </form>
+
+  <p class="success" *ngIf="success">{{ success }}</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <div *ngIf="connections.length > 0" class="result">
+    <h3>Saved Connections</h3>
+    <ul>
+      <li *ngFor="let connection of connections">
+        {{ connection.tenantId }} / {{ connection.clientId }}
+      </li>
+    </ul>
+  </div>
+
+  <a routerLink="/dashboard">Go to Dashboard</a>
+</section>

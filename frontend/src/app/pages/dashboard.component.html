@@ -1,0 +1,26 @@
+<section class="grid">
+  <article class="tile">
+    <h3>Yesterday Cost</h3>
+    <p>$0.00</p>
+  </article>
+
+  <article class="tile">
+    <h3>Today Cost</h3>
+    <p>$0.00</p>
+  </article>
+
+  <article class="tile">
+    <h3>Spike Status</h3>
+    <p>Not evaluated yet</p>
+  </article>
+
+  <article class="tile">
+    <h3>Main Cause Resource</h3>
+    <p>Pending worker ingestion</p>
+  </article>
+</section>
+
+<section class="meta">
+  <p>Saved Azure connections: {{ connectionCount }}</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+</section>

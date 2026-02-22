@@ -1,0 +1,6 @@
+@AzCostPilot.Api_HostAddress = http://localhost:5168
+
+GET {{AzCostPilot.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
