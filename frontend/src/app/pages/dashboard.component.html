@@ -121,9 +121,10 @@
     </ul>
   </section>
 
-  <section class="history" *ngIf="history.length > 0">
+  <section class="history">
     <h3>Recent Events</h3>
-    <ul>
+    <p *ngIf="history.length === 0">No unusual events in the last 7 days.</p>
+    <ul *ngIf="history.length > 0">
       <li *ngFor="let event of history">
         <div>
           <strong>{{ event.date }}</strong>

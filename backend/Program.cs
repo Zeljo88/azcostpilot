@@ -390,7 +390,11 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
     return Results.Ok(summary);
 });
 
-dashboard.MapGet("/history", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+dashboard.MapGet("/history", async (
+    ClaimsPrincipal principal,
+    AppDbContext db,
+    decimal? threshold,
+    CancellationToken cancellationToken) =>
 {
     var userId = GetUserId(principal);
     if (userId is null)
@@ -398,24 +402,87 @@ dashboard.MapGet("/history", async (ClaimsPrincipal principal, AppDbContext db, 
         return Results.Unauthorized();
     }
 
-    var history = await db.CostEvents.AsNoTracking()
-        .Where(x => x.UserId == userId.Value)
-        .OrderByDescending(x => x.Date)
-        .ThenByDescending(x => x.CreatedAtUtc)
-        .Take(10)
-        .Select(x => new DashboardHistoryItemResponse(
-            x.Date,
-            x.TotalYesterday,
-            x.TotalToday,
-            x.Difference,
-            x.SpikeFlag,
-            x.TopResourceId,
-            x.TopResourceName,
-            x.TopIncreaseAmount,
-            string.IsNullOrWhiteSpace(x.SuggestionText)
-                ? (x.SpikeFlag ? "Spike detected." : "No spike detected.")
-                : x.SuggestionText!))
+    var safeThreshold = threshold is null || threshold <= 0m ? 5m : threshold.Value;
+    var toDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    var fromDate = toDate.AddDays(-6);
+    var loadFromDate = fromDate.AddDays(-7);
+    var rows = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId.Value && x.Date >= loadFromDate && x.Date <= toDate)
+        .Select(x => new { x.Date, x.ResourceId, x.Cost })
         .ToListAsync(cancellationToken);
+
+    var totalsByDate = rows
+        .GroupBy(x => x.Date)
+        .ToDictionary(group => group.Key, group => group.Sum(x => x.Cost));
+    var resourceCostsByDate = rows
+        .GroupBy(x => x.Date)
+        .ToDictionary(
+            dateGroup => dateGroup.Key,
+            dateGroup => dateGroup
+                .GroupBy(x => x.ResourceId)
+                .ToDictionary(
+                    resourceGroup => resourceGroup.Key,
+                    resourceGroup => resourceGroup.Sum(x => x.Cost),
+                    StringComparer.OrdinalIgnoreCase));
+
+    var history = new List<DashboardHistoryItemResponse>();
+    for (var offset = 0; offset < 7; offset++)
+    {
+        var date = toDate.AddDays(-offset);
+        var yesterdayDate = date.AddDays(-1);
+        var totalToday = totalsByDate.TryGetValue(date, out var todayValue) ? todayValue : 0m;
+        var totalYesterday = totalsByDate.TryGetValue(yesterdayDate, out var yesterdayValue) ? yesterdayValue : 0m;
+        var difference = totalToday - totalYesterday;
+
+        var baselineValues = Enumerable.Range(1, 7)
+            .Select(daysBack => date.AddDays(-daysBack))
+            .Where(day => totalsByDate.TryGetValue(day, out _))
+            .Select(day => totalsByDate[day])
+            .ToList();
+        var baseline = baselineValues.Count > 0 ? baselineValues.Average() : 0m;
+        var spikeFlag = baseline > 0m
+            && totalToday > baseline * 1.5m
+            && difference > safeThreshold;
+
+        if (!spikeFlag && difference <= safeThreshold)
+        {
+            continue;
+        }
+
+        var todayByResource = resourceCostsByDate.TryGetValue(date, out var todayResources)
+            ? todayResources
+            : new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var yesterdayByResource = resourceCostsByDate.TryGetValue(yesterdayDate, out var yesterdayResources)
+            ? yesterdayResources
+            : new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        string? topResourceId = null;
+        decimal? topIncreaseAmount = null;
+        foreach (var resourceId in todayByResource.Keys.Union(yesterdayByResource.Keys, StringComparer.OrdinalIgnoreCase))
+        {
+            var todayCost = todayByResource.TryGetValue(resourceId, out var todayCostValue) ? todayCostValue : 0m;
+            var yesterdayCost = yesterdayByResource.TryGetValue(resourceId, out var yesterdayCostValue) ? yesterdayCostValue : 0m;
+            var delta = todayCost - yesterdayCost;
+            if (delta <= 0m)
+            {
+                continue;
+            }
+
+            if (topIncreaseAmount is null || delta > topIncreaseAmount.Value)
+            {
+                topIncreaseAmount = delta;
+                topResourceId = resourceId;
+            }
+        }
+
+        history.Add(new DashboardHistoryItemResponse(
+            Date: date,
+            YesterdayTotal: decimal.Round(totalYesterday, 4),
+            TodayTotal: decimal.Round(totalToday, 4),
+            Difference: decimal.Round(difference, 4),
+            SpikeFlag: spikeFlag,
+            TopResourceName: topResourceId is null ? null : ParseResourceName(topResourceId),
+            TopIncreaseAmount: topIncreaseAmount is null ? null : decimal.Round(topIncreaseAmount.Value, 4)));
+    }
 
     return Results.Ok(history);
 });

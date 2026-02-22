@@ -55,10 +55,8 @@ export interface DashboardHistoryItem {
   todayTotal: number;
   difference: number;
   spikeFlag: boolean;
-  topResourceId: string | null;
   topResourceName: string | null;
   topIncreaseAmount: number | null;
-  suggestionText: string;
 }
 
 export interface DashboardWasteFinding {
@@ -117,8 +115,8 @@ export class ApiService {
     });
   }
 
-  getDashboardHistory(): Observable<DashboardHistoryItem[]> {
-    return this.http.get<DashboardHistoryItem[]>(`${this.baseUrl}/dashboard/history`, {
+  getDashboardHistory(threshold = 5): Observable<DashboardHistoryItem[]> {
+    return this.http.get<DashboardHistoryItem[]>(`${this.baseUrl}/dashboard/history?threshold=${threshold}`, {
       headers: this.authHeaders()
     });
   }

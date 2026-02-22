@@ -198,19 +198,21 @@ public sealed class DevelopmentScenarioSeeder(
         ResourceTemplate template,
         Random random)
     {
-        if (date != toDate)
+        if (date != toDate && date != toDate.AddDays(-3))
         {
             return baseCost;
         }
 
         if (template.Key == "sql")
         {
-            return baseCost * 4.8m + 15m;
+            var multiplier = date == toDate ? 4.8m : 3.1m;
+            var additive = date == toDate ? 15m : 7m;
+            return baseCost * multiplier + additive;
         }
 
         if (template.Key == "monitor")
         {
-            return baseCost * 1.7m;
+            return date == toDate ? baseCost * 1.7m : baseCost * 1.35m;
         }
 
         return baseCost * (1.05m + ((decimal)random.NextDouble() * 0.08m));
