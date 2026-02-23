@@ -1,0 +1,50 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "worker/**"
+      - "shared/**"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: rg-azcostpilot-weu-dev
+  ACR_NAME: acrazcostpilot72059
+  WORKER_JOB_NAME: caj-azcostpilot-worker-dev
+  WORKER_IMAGE_REPO: azcostpilot-worker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and Push Worker Image
+      run: |
+        az config set extension.use_dynamic_install=yes_without_prompt
+        az acr build \
+          --registry $ACR_NAME \
+          --image $WORKER_IMAGE_REPO:${{ github.sha }} \
+          --file worker/Dockerfile \
+          .
+
+      - name: Update Worker Job Image
+      run: |
+        az config set extension.use_dynamic_install=yes_without_prompt
+        az containerapp job update \
+          --resource-group $RESOURCE_GROUP \
+          --name $WORKER_JOB_NAME \
+          --image $ACR_NAME.azurecr.io/$WORKER_IMAGE_REPO:${{ github.sha }}

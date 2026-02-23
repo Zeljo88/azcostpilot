@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+var configuredAllowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -46,7 +47,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(
         "frontend",
-        policy => policy.SetIsOriginAllowed(IsAllowedFrontendOrigin)
+        policy => policy.SetIsOriginAllowed(origin => IsAllowedFrontendOrigin(origin, configuredAllowedOrigins))
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
@@ -653,7 +654,7 @@ static async Task ApplyMigrationsAsync(WebApplication app)
     }
 }
 
-static bool IsAllowedFrontendOrigin(string? origin)
+static bool IsAllowedFrontendOrigin(string? origin, IReadOnlyCollection<string> configuredAllowedOrigins)
 {
     if (string.IsNullOrWhiteSpace(origin) || !Uri.TryCreate(origin, UriKind.Absolute, out var uri))
     {
@@ -665,7 +666,12 @@ static bool IsAllowedFrontendOrigin(string? origin)
     var isHttp = uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
         || uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
 
-    return isLoopbackHost && isHttp;
+    if (isLoopbackHost && isHttp)
+    {
+        return true;
+    }
+
+    return configuredAllowedOrigins.Any(allowed => string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase));
 }
 
 static async Task<DateOnly?> GetLatestCompleteBillingDateAsync(

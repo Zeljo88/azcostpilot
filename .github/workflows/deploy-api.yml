@@ -1,0 +1,52 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - "shared/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: rg-azcostpilot-weu-dev
+  ACR_NAME: acrazcostpilot72059
+  API_APP_NAME: ca-azcostpilot-api-dev
+  API_IMAGE_REPO: azcostpilot-api
+  FRONTEND_ORIGIN: https://wonderful-wave-0b2f7b303.6.azurestaticapps.net
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and Push API Image
+      run: |
+        az config set extension.use_dynamic_install=yes_without_prompt
+        az acr build \
+          --registry $ACR_NAME \
+          --image $API_IMAGE_REPO:${{ github.sha }} \
+          --file backend/Dockerfile \
+          .
+
+      - name: Update API Container App
+      run: |
+        az config set extension.use_dynamic_install=yes_without_prompt
+        az containerapp update \
+          --resource-group $RESOURCE_GROUP \
+          --name $API_APP_NAME \
+          --image $ACR_NAME.azurecr.io/$API_IMAGE_REPO:${{ github.sha }} \
+          --set-env-vars Cors__AllowedOrigins__0=$FRONTEND_ORIGIN
