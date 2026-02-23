@@ -20,17 +20,23 @@
       </span>
       <span class="confidence" [ngClass]="getConfidenceClass(vm.confidence)">
         Confidence: {{ vm.confidence }}
+        <span
+          class="info-tip info-tip-inline"
+          title="Indicates how clearly a single resource explains the cost change."
+          aria-label="Indicates how clearly a single resource explains the cost change."
+          >i</span
+        >
       </span>
     </div>
   </section>
 
   <section class="metrics-grid">
     <article class="metric">
-      <h3>Yesterday Cost</h3>
+      <h3>Previous Day</h3>
       <p>{{ formatCurrency(vm.yesterdayTotal) }}</p>
     </article>
     <article class="metric">
-      <h3>Today Cost</h3>
+      <h3>Latest Cost</h3>
       <p>{{ formatCurrency(vm.todayTotal) }}</p>
     </article>
     <article class="metric">
@@ -40,10 +46,24 @@
       </p>
     </article>
     <article class="metric">
-      <h3>7-Day Baseline</h3>
+      <h3>
+        7-Day Baseline
+        <span
+          class="info-tip"
+          title="Your average daily cost over the last 7 days."
+          aria-label="Your average daily cost over the last 7 days."
+          >i</span
+        >
+      </h3>
       <p>{{ formatCurrency(vm.baseline) }}</p>
     </article>
+    <article class="metric">
+      <h3>Month-to-Date Total</h3>
+      <p>{{ formatCurrency(vm.monthToDateTotal) }}</p>
+    </article>
   </section>
+  <p class="subtitle">Based on latest available billing data.</p>
+  <p class="subtitle">Data date: {{ vm.latestDataDate | date: 'yyyy-MM-dd' }}</p>
 
   <section class="dev-scenarios">
     <h3>Development Scenarios</h3>
@@ -67,7 +87,7 @@
 
   <section class="explanation">
     <article class="cause">
-      <h3>Main Cause</h3>
+      <h3>Largest Cost Change Today</h3>
       <ng-container *ngIf="getTopCause() as cause; else noCause">
         <p class="resource-name">{{ cause.resourceName }}</p>
         <p class="resource-meta">Resource Group: {{ getResourceGroup(cause.resourceId) }}</p>
@@ -90,7 +110,7 @@
 
     <article class="suggestion">
       <h3>Suggestion</h3>
-      <p>{{ vm.suggestionText }}</p>
+      <p>This resource caused most of today's cost increase. Review its usage to confirm if this was expected.</p>
     </article>
   </section>
 

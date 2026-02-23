@@ -2,10 +2,12 @@ namespace AzCostPilot.Api.Contracts;
 
 public sealed record DashboardSummaryResponse(
     DateOnly Date,
+    DateTime LatestDataDate,
     decimal YesterdayTotal,
     decimal TodayTotal,
     decimal Difference,
     decimal Baseline,
+    decimal MonthToDateTotal,
     bool SpikeFlag,
     string Confidence,
     DashboardCauseResourceResponse? TopCauseResource,
