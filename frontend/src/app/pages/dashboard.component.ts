@@ -9,6 +9,7 @@ import {
   DashboardWasteFinding,
   SeedSyntheticCostDataResponse
 } from '../services/api.service';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-dashboard',
@@ -18,6 +19,7 @@ import {
   styleUrl: './dashboard.component.css'
 })
 export class DashboardComponent implements OnInit {
+  readonly showDevScenarios = environment.showDevScenarios;
   readonly devScenarios: ReadonlyArray<{ key: string; label: string; description: string }> = [
     { key: 'normal', label: 'Normal Usage', description: 'Stable daily costs with realistic variance.' },
     {
