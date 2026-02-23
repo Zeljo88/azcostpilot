@@ -16,6 +16,14 @@ public sealed class WasteFinding
 
     public decimal? EstimatedMonthlyCost { get; set; }
 
+    public string? Classification { get; set; }
+
+    public decimal? InactiveDurationDays { get; set; }
+
+    public string? WasteConfidenceLevel { get; set; }
+
+    public DateTime? LastSeenActiveUtc { get; set; }
+
     public string Status { get; set; } = "Open";
 
     public DateTime DetectedAtUtc { get; set; }

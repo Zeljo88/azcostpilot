@@ -24,6 +24,7 @@ public sealed class WasteFindingService(
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var startDate = today.AddDays(-6);
+        var vmActivityStartDate = today.AddDays(-30);
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var targets = await db.Subscriptions.AsNoTracking()
             .Join(
@@ -37,6 +38,7 @@ public sealed class WasteFindingService(
                     connection.ClientId,
                     connection.EncryptedClientSecret))
             .ToListAsync(cancellationToken);
+        var userIds = targets.Select(x => x.UserId).Distinct().ToList();
         var recentCostMap = await db.DailyCostResources.AsNoTracking()
             .Where(x => x.Date >= startDate && x.Date <= today)
             .GroupBy(x => new { x.UserId, x.ResourceId })
@@ -55,6 +57,48 @@ public sealed class WasteFindingService(
                     item => NormalizeResourceId(item.ResourceId),
                     item => decimal.Round(item.SumCost * (30m / 7m), 4),
                     StringComparer.OrdinalIgnoreCase));
+        var vmActivityRows = await db.DailyCostResources.AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId) && x.Date >= vmActivityStartDate && x.Date <= today)
+            .Select(x => new
+            {
+                x.UserId,
+                x.ResourceId,
+                x.Date,
+                x.Cost
+            })
+            .ToListAsync(cancellationToken);
+        var vmActivityByResource = vmActivityRows
+            .GroupBy(x => (x.UserId, ResourceId: NormalizeResourceId(x.ResourceId)))
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var activeDates = group
+                        .Where(x => x.Cost > 0m)
+                        .Select(x => x.Date)
+                        .Distinct()
+                        .OrderBy(x => x.DayNumber)
+                        .ToList();
+                    return new VmActivityProfile(
+                        LastCostActiveDate: activeDates.Count == 0 ? null : activeDates[^1],
+                        ActiveDates: activeDates);
+                });
+        var previousStoppedVmFindings = await db.WasteFindings.AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId) && x.FindingType == WasteFindingType.StoppedVm)
+            .ToListAsync(cancellationToken);
+        var previousLastSeenActiveByResource = previousStoppedVmFindings
+            .Where(x => x.LastSeenActiveUtc is not null)
+            .GroupBy(x => (x.UserId, ResourceId: NormalizeResourceId(x.ResourceId)))
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Where(x => x.LastSeenActiveUtc is not null)
+                    .Max(x => x.LastSeenActiveUtc!.Value));
+        var previousDetectedAtByResource = previousStoppedVmFindings
+            .GroupBy(x => (x.UserId, ResourceId: NormalizeResourceId(x.ResourceId)))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Max(x => x.DetectedAtUtc));
         var collected = new List<WasteFindingCandidate>();
 
         foreach (var target in targets)
@@ -69,7 +113,14 @@ public sealed class WasteFindingService(
                     cancellationToken);
                 var disks = await QueryUnattachedDisksAsync(target, accessToken, cancellationToken);
                 var publicIps = await QueryUnusedPublicIpsAsync(target, accessToken, cancellationToken);
-                var stoppedVms = await QueryStoppedVmsAsync(target, accessToken, cancellationToken);
+                var stoppedVms = await QueryStoppedVmsAsync(
+                    target,
+                    accessToken,
+                    today,
+                    vmActivityByResource,
+                    previousLastSeenActiveByResource,
+                    previousDetectedAtByResource,
+                    cancellationToken);
 
                 collected.AddRange(disks);
                 collected.AddRange(publicIps);
@@ -88,7 +139,6 @@ public sealed class WasteFindingService(
             WasteFindingType.UnusedPublicIp,
             WasteFindingType.StoppedVm
         };
-        var userIds = targets.Select(x => x.UserId).Distinct().ToList();
         if (userIds.Count > 0)
         {
             var previous = await db.WasteFindings
@@ -110,6 +160,10 @@ public sealed class WasteFindingService(
                     ResourceId = Truncate(candidate.ResourceId, 1024),
                     ResourceName = Truncate(candidate.ResourceName, 256),
                     EstimatedMonthlyCost = estimate,
+                    Classification = candidate.Classification,
+                    InactiveDurationDays = candidate.InactiveDurationDays,
+                    WasteConfidenceLevel = candidate.WasteConfidenceLevel,
+                    LastSeenActiveUtc = candidate.LastSeenActiveUtc,
                     Status = "Open",
                     DetectedAtUtc = now
                 };
@@ -234,6 +288,10 @@ public sealed class WasteFindingService(
     private async Task<List<WasteFindingCandidate>> QueryStoppedVmsAsync(
         ScanTarget target,
         string accessToken,
+        DateOnly today,
+        Dictionary<(Guid UserId, string ResourceId), VmActivityProfile> vmActivityByResource,
+        Dictionary<(Guid UserId, string ResourceId), DateTime> previousLastSeenActiveByResource,
+        Dictionary<(Guid UserId, string ResourceId), DateTime> previousDetectedAtByResource,
         CancellationToken cancellationToken)
     {
         const string query = """
@@ -254,13 +312,47 @@ public sealed class WasteFindingService(
             }
 
             var resourceName = GetString(row, "name");
+            var resourceKey = (target.UserId, NormalizeResourceId(resourceId));
+            vmActivityByResource.TryGetValue(resourceKey, out var profile);
+            previousLastSeenActiveByResource.TryGetValue(resourceKey, out var previousLastSeenActiveUtc);
+            previousDetectedAtByResource.TryGetValue(resourceKey, out var previousDetectedAtUtc);
+            var lastCostActiveDate = profile?.LastCostActiveDate;
+            var lastSeenActiveUtc = lastCostActiveDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            if (lastSeenActiveUtc is null && previousLastSeenActiveUtc != default)
+            {
+                lastSeenActiveUtc = previousLastSeenActiveUtc;
+            }
+
+            var inactiveDurationDays = ResolveInactiveDurationDays(today, lastCostActiveDate, lastSeenActiveUtc);
+            var hasStrongHistorySignal = lastCostActiveDate is not null || lastSeenActiveUtc is not null;
+            if (inactiveDurationDays is null && previousDetectedAtUtc != default)
+            {
+                var firstObservedStoppedDate = DateOnly.FromDateTime(previousDetectedAtUtc.ToUniversalTime().Date);
+                inactiveDurationDays = today.DayNumber - firstObservedStoppedDate.DayNumber;
+            }
+
+            if (inactiveDurationDays is null || inactiveDurationDays.Value < 2m)
+            {
+                continue;
+            }
+
+            if (IsRepeatingStopStartPattern(profile, today))
+            {
+                continue;
+            }
+
+            var (classification, confidence) = ClassifyVmInactivity(inactiveDurationDays.Value, hasStrongHistorySignal);
             findings.Add(new WasteFindingCandidate(
                 target.UserId,
                 target.AzureSubscriptionId,
                 WasteFindingType.StoppedVm,
                 resourceId,
                 string.IsNullOrWhiteSpace(resourceName) ? ParseResourceName(resourceId) : resourceName,
-                EstimateStoppedVm()));
+                EstimateStoppedVm(),
+                classification,
+                inactiveDurationDays,
+                confidence,
+                lastSeenActiveUtc));
         }
 
         return findings;
@@ -364,6 +456,52 @@ public sealed class WasteFindingService(
         return 20m;
     }
 
+    private static decimal? ResolveInactiveDurationDays(
+        DateOnly today,
+        DateOnly? lastCostActiveDate,
+        DateTime? lastSeenActiveUtc)
+    {
+        if (lastCostActiveDate is not null)
+        {
+            return today.DayNumber - lastCostActiveDate.Value.DayNumber;
+        }
+
+        if (lastSeenActiveUtc is not null)
+        {
+            var lastSeenDate = DateOnly.FromDateTime(lastSeenActiveUtc.Value.ToUniversalTime().Date);
+            return today.DayNumber - lastSeenDate.DayNumber;
+        }
+
+        return null;
+    }
+
+    private static bool IsRepeatingStopStartPattern(VmActivityProfile? profile, DateOnly today)
+    {
+        if (profile is null || profile.ActiveDates.Count == 0)
+        {
+            return false;
+        }
+
+        var lookbackStart = today.AddDays(-13).DayNumber;
+        var activeDaysInLast14 = profile.ActiveDates.Count(x => x.DayNumber >= lookbackStart);
+        return activeDaysInLast14 >= 6;
+    }
+
+    private static (string Classification, string Confidence) ClassifyVmInactivity(decimal inactiveDays, bool hasStrongHistorySignal)
+    {
+        if (!hasStrongHistorySignal)
+        {
+            return ("Possibly unused", "Low");
+        }
+
+        if (inactiveDays > 7m)
+        {
+            return ("Likely unused", "High");
+        }
+
+        return ("Possibly unused", "Medium");
+    }
+
     private static string ParseResourceName(string resourceId)
     {
         if (string.IsNullOrWhiteSpace(resourceId))
@@ -446,7 +584,15 @@ public sealed class WasteFindingService(
         string FindingType,
         string ResourceId,
         string ResourceName,
-        decimal? HeuristicEstimate);
+        decimal? HeuristicEstimate,
+        string? Classification = null,
+        decimal? InactiveDurationDays = null,
+        string? WasteConfidenceLevel = null,
+        DateTime? LastSeenActiveUtc = null);
+
+    private sealed record VmActivityProfile(
+        DateOnly? LastCostActiveDate,
+        List<DateOnly> ActiveDates);
 
     private static class WasteFindingType
     {

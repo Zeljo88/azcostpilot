@@ -104,6 +104,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.ResourceId).HasMaxLength(1024).IsRequired();
             entity.Property(x => x.ResourceName).HasMaxLength(256).IsRequired();
             entity.Property(x => x.EstimatedMonthlyCost).HasColumnType("numeric(18,4)");
+            entity.Property(x => x.Classification).HasMaxLength(64);
+            entity.Property(x => x.InactiveDurationDays).HasColumnType("numeric(8,2)");
+            entity.Property(x => x.WasteConfidenceLevel).HasMaxLength(16);
+            entity.Property(x => x.LastSeenActiveUtc).HasColumnType("timestamp with time zone");
             entity.Property(x => x.Status).HasMaxLength(64).IsRequired();
             entity.Property(x => x.DetectedAtUtc).IsRequired();
             entity.HasIndex(x => new { x.UserId, x.FindingType, x.ResourceId });

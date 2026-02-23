@@ -34,5 +34,8 @@ public sealed record DashboardWasteFindingResponse(
     string ResourceName,
     string AzureSubscriptionId,
     decimal? EstimatedMonthlyCost,
+    string? Classification,
+    decimal? InactiveDurationDays,
+    string? WasteConfidenceLevel,
     DateTime DetectedAtUtc,
     string Status);
