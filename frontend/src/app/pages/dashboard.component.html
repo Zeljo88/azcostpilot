@@ -65,7 +65,7 @@
   <p class="subtitle">Based on latest available billing data.</p>
   <p class="subtitle">Data date: {{ vm.latestDataDate | date: 'yyyy-MM-dd' }}</p>
 
-  <section class="dev-scenarios">
+  <section class="dev-scenarios" *ngIf="showDevScenarios">
     <h3>Development Scenarios</h3>
     <p class="dev-scenarios-subtitle">Seed synthetic data to test dashboard behavior quickly.</p>
     <div class="scenario-grid">

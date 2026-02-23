@@ -1,3 +1,4 @@
 export const environment = {
-  apiBaseUrl: 'http://localhost:5168'
+  apiBaseUrl: 'http://localhost:5168',
+  showDevScenarios: true
 };
