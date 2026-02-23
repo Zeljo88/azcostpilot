@@ -680,27 +680,51 @@ static async Task<DateOnly?> GetLatestCompleteBillingDateAsync(
     DateOnly currentDate,
     CancellationToken cancellationToken)
 {
-    var recentDates = await db.DailyCostResources.AsNoTracking()
-        .Where(x => x.UserId == userId)
-        .Select(x => x.Date)
-        .Distinct()
-        .OrderByDescending(x => x)
-        .Take(2)
+    var yesterday = currentDate.AddDays(-1);
+    var dayBeforeYesterday = currentDate.AddDays(-2);
+    var rows = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId && x.Date <= yesterday)
+        .Select(x => new { x.Date, x.ResourceId, x.Cost })
         .ToListAsync(cancellationToken);
 
-    if (recentDates.Count == 0)
+    if (rows.Count == 0)
     {
         return null;
     }
 
-    var newestDate = recentDates[0];
-    var mayStillBeProcessing = newestDate >= currentDate.AddDays(-1);
-    if (mayStillBeProcessing && recentDates.Count > 1)
+    var dates = rows
+        .Select(x => x.Date)
+        .Distinct()
+        .OrderByDescending(x => x)
+        .ToList();
+
+    // Prefer yesterday when present.
+    if (dates.Contains(yesterday))
     {
-        return recentDates[1];
+        // Basic completeness guard: if yesterday is dramatically smaller than day-2,
+        // treat it as incomplete and use day-2 instead.
+        if (dates.Contains(dayBeforeYesterday))
+        {
+            var yesterdayRows = rows.Where(x => x.Date == yesterday).ToList();
+            var dayBeforeRows = rows.Where(x => x.Date == dayBeforeYesterday).ToList();
+            var yesterdayTotal = yesterdayRows.Sum(x => x.Cost);
+            var dayBeforeTotal = dayBeforeRows.Sum(x => x.Cost);
+            var yesterdayResources = yesterdayRows.Select(x => x.ResourceId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            var dayBeforeResources = dayBeforeRows.Select(x => x.ResourceId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+            var totalsSuggestIncomplete = dayBeforeTotal > 0m && yesterdayTotal < (dayBeforeTotal * 0.4m);
+            var resourcesSuggestIncomplete = dayBeforeResources > 0 && yesterdayResources < Math.Max(1, (int)Math.Floor(dayBeforeResources * 0.4m));
+            if (totalsSuggestIncomplete && resourcesSuggestIncomplete)
+            {
+                return dayBeforeYesterday;
+            }
+        }
+
+        return yesterday;
     }
 
-    return newestDate;
+    // If yesterday is missing, use the newest date before yesterday.
+    return dates[0];
 }
 
 static string ResolveCurrency(IEnumerable<string> currencies)
