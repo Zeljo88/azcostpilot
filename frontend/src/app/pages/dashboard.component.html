@@ -11,7 +11,7 @@
 <ng-container *ngIf="!loading && !error && summary as vm">
   <section class="hero">
     <div>
-      <h2>Cost Summary for {{ vm.date }}</h2>
+      <h2>Cost Summary (Latest Billing Data)</h2>
       <p class="subtitle">Saved Azure connections: {{ connectionCount }}</p>
     </div>
     <div class="hero-badges">
@@ -110,7 +110,7 @@
 
     <article class="suggestion">
       <h3>Suggestion</h3>
-      <p>This resource caused most of today's cost increase. Review its usage to confirm if this was expected.</p>
+      <p>This resource contributed the most to the recent cost increase. Review it to confirm the change was expected.</p>
     </article>
   </section>
 

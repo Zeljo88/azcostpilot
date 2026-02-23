@@ -13,20 +13,30 @@
       <input name="password" [(ngModel)]="password" type="password" required />
     </label>
 
-    <label>
-      Tenant ID
-      <input name="tenantId" [(ngModel)]="tenantId" type="text" required />
-    </label>
+    <section class="sp-section">
+      <div class="sp-header">
+        <h3>Azure Service Principal Credentials</h3>
+        <button type="button" class="help-btn" (click)="openSpHelp()" aria-label="How to create service principal">
+          ?
+        </button>
+      </div>
+      <p class="sp-hint">Enter the tenant/app/secret values from your Azure app registration.</p>
 
-    <label>
-      Client ID
-      <input name="clientId" [(ngModel)]="clientId" type="text" required />
-    </label>
+      <label>
+        Tenant ID
+        <input name="tenantId" [(ngModel)]="tenantId" type="text" required />
+      </label>
 
-    <label>
-      Client Secret
-      <input name="clientSecret" [(ngModel)]="clientSecret" type="password" required />
-    </label>
+      <label>
+        Client ID
+        <input name="clientId" [(ngModel)]="clientId" type="text" required />
+      </label>
+
+      <label>
+        Client Secret
+        <input name="clientSecret" [(ngModel)]="clientSecret" type="password" required />
+      </label>
+    </section>
 
     <button type="submit" [disabled]="saving">
       {{ saving ? 'Saving...' : 'Connect' }}
@@ -57,3 +67,28 @@
 
   <a routerLink="/dashboard">Go to Dashboard</a>
 </section>
+
+<div class="modal-backdrop" *ngIf="showSpHelp" (click)="closeSpHelp()">
+  <div class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-head">
+      <h3>Create Service Principal (Azure CLI)</h3>
+      <button type="button" class="close-btn" (click)="closeSpHelp()" aria-label="Close help">x</button>
+    </div>
+    <p>Run these commands in Azure CLI (replace placeholders):</p>
+    <pre><code>az login
+az account set --subscription "&lt;SUBSCRIPTION_ID&gt;"
+
+az ad sp create-for-rbac --name "az-cost-pilot-sp" --skip-assignment
+
+az role assignment create \
+  --assignee "&lt;CLIENT_ID_FROM_PREVIOUS_COMMAND&gt;" \
+  --role "Reader" \
+  --scope "/subscriptions/&lt;SUBSCRIPTION_ID&gt;"
+
+az role assignment create \
+  --assignee "&lt;CLIENT_ID_FROM_PREVIOUS_COMMAND&gt;" \
+  --role "Cost Management Reader" \
+  --scope "/subscriptions/&lt;SUBSCRIPTION_ID&gt;"</code></pre>
+    <p class="role-note"><strong>Roles granted:</strong> <code>Reader</code> for resource metadata and <code>Cost Management Reader</code> for cost queries.</p>
+  </div>
+</div>

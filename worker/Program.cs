@@ -7,10 +7,13 @@ using Microsoft.EntityFrameworkCore;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
 builder.Services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
 builder.Services.AddSingleton<ISecretCipher>(sp => sp.GetRequiredService<ISecretEncryptionService>());
 builder.Services.AddHttpClient<ICostSyncService, CostSyncService>();
 builder.Services.AddHttpClient<IWasteFindingService, WasteFindingService>();
+builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+builder.Services.AddSingleton<ISpikeEmailNotificationService, SpikeEmailNotificationService>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

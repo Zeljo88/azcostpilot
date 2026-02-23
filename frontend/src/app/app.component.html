@@ -1,6 +1,7 @@
 <header class="app-header">
   <h1>{{ title }}</h1>
   <nav>
+    <a routerLink="/" [routerLinkActiveOptions]="{ exact: true }" routerLinkActive="active">Home</a>
     <a routerLink="/connect" routerLinkActive="active">Connect</a>
     <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
   </nav>

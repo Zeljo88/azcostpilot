@@ -30,6 +30,7 @@ export class ConnectComponent {
   connections: AzureConnectionSummary[] = [];
   discoveredSubscriptions: ConnectedSubscription[] = [];
   subscriptionCount = 0;
+  showSpHelp = false;
 
   constructor(private readonly api: ApiService) {}
 
@@ -72,5 +73,13 @@ export class ConnectComponent {
 
     const auth = await firstValueFrom(this.api.login(this.email.trim(), this.password));
     this.api.setToken(auth.token);
+  }
+
+  openSpHelp(): void {
+    this.showSpHelp = true;
+  }
+
+  closeSpHelp(): void {
+    this.showSpHelp = false;
   }
 }
