@@ -1,6 +1,7 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 export interface AuthResponse {
   token: string;
@@ -84,7 +85,7 @@ export interface SeedSyntheticCostDataResponse {
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private readonly baseUrl = 'http://localhost:5168';
+  private readonly baseUrl = environment.apiBaseUrl;
   private readonly tokenStorageKey = 'azcostpilot_token';
 
   constructor(private readonly http: HttpClient) {}

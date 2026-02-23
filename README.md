@@ -66,6 +66,31 @@ Recommended Azure target:
 3. Worker on Azure Container Apps Job/Worker
 4. Frontend on Static Web Apps or App Service
 
+## GitHub Actions deployment
+
+Workflows added:
+
+- `.github/workflows/deploy-api.yml`
+- `.github/workflows/deploy-worker.yml`
+- `.github/workflows/deploy-frontend.yml`
+
+Set these GitHub repository secrets:
+
+- `AZURE_CLIENT_ID`: `2021faa1-4ce7-4837-a39a-0df5a8be1d98`
+- `AZURE_TENANT_ID`: `b9fec68c-c92d-461e-9a97-3d03a0f18b82`
+- `AZURE_SUBSCRIPTION_ID`: `2e5cae8d-2c29-4c83-8198-7a9329578f38`
+- `AZURE_STATIC_WEB_APPS_API_TOKEN`: Static Web App deployment token
+
+Provisioned resources:
+
+- Resource group: `rg-azcostpilot-weu-dev`
+- Container Apps env: `cae-azcostpilot-weu-dev`
+- API app: `ca-azcostpilot-api-dev`
+- Worker job: `caj-azcostpilot-worker-dev`
+- ACR: `acrazcostpilot72059`
+- PostgreSQL: `psql-azcostpilot-swe-dev` (`azcostpilot` db)
+- Static Web App: `swa-azcostpilot-dev`
+
 ## Database schema
 
 Initial migration creates:
