@@ -2,6 +2,7 @@ namespace AzCostPilot.Api.Contracts;
 
 public sealed record DashboardSummaryResponse(
     DateOnly Date,
+    DateTime LatestDataDate,
     decimal YesterdayTotal,
     decimal TodayTotal,
     decimal Difference,

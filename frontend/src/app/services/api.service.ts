@@ -39,6 +39,7 @@ export interface DashboardCauseResource {
 
 export interface DashboardSummaryResponse {
   date: string;
+  latestDataDate: string;
   yesterdayTotal: number;
   todayTotal: number;
   difference: number;

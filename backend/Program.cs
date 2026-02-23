@@ -341,22 +341,23 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
         return Results.Unauthorized();
     }
 
-    var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-    var monthStart = new DateOnly(today.Year, today.Month, 1);
+    var currentDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    var monthStart = new DateOnly(currentDate.Year, currentDate.Month, 1);
     var monthToDateTotal = await db.DailyCostResources.AsNoTracking()
-        .Where(x => x.UserId == userId.Value && x.Date >= monthStart && x.Date <= today)
+        .Where(x => x.UserId == userId.Value && x.Date >= monthStart && x.Date <= currentDate)
         .SumAsync(x => (decimal?)x.Cost, cancellationToken) ?? 0m;
 
-    var latestEvent = await db.CostEvents.AsNoTracking()
-        .Where(x => x.UserId == userId.Value)
-        .OrderByDescending(x => x.Date)
-        .ThenByDescending(x => x.CreatedAtUtc)
-        .FirstOrDefaultAsync(cancellationToken);
+    var latestDate = await GetLatestCompleteBillingDateAsync(
+        db,
+        userId.Value,
+        currentDate,
+        cancellationToken);
 
-    if (latestEvent is null)
+    if (latestDate is null)
     {
         var empty = new DashboardSummaryResponse(
-            Date: today,
+            Date: currentDate,
+            LatestDataDate: DateTime.SpecifyKind(currentDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
             YesterdayTotal: 0m,
             TodayTotal: 0m,
             Difference: 0m,
@@ -369,31 +370,84 @@ dashboard.MapGet("/summary", async (ClaimsPrincipal principal, AppDbContext db, 
         return Results.Ok(empty);
     }
 
+    var previousDate = latestDate.Value.AddDays(-1);
+    var metricsRows = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId.Value && x.Date <= latestDate.Value)
+        .Select(x => new { x.Date, x.ResourceId, x.Cost })
+        .ToListAsync(cancellationToken);
+
+    var totalsByDate = metricsRows
+        .GroupBy(x => x.Date)
+        .ToDictionary(group => group.Key, group => group.Sum(x => x.Cost));
+    var latestTotal = totalsByDate.TryGetValue(latestDate.Value, out var latestValue) ? latestValue : 0m;
+    var previousTotal = totalsByDate.TryGetValue(previousDate, out var previousValue) ? previousValue : 0m;
+    var difference = latestTotal - previousTotal;
+    var baselineDates = totalsByDate.Keys
+        .Where(x => x <= latestDate.Value)
+        .OrderByDescending(x => x)
+        .Take(7)
+        .ToList();
+    var baseline = baselineDates.Count > 0
+        ? baselineDates.Average(x => totalsByDate[x])
+        : 0m;
+    var spikeFlag = baseline > 0m
+        && latestTotal > baseline * 1.5m
+        && difference > 5m;
+
     DashboardCauseResourceResponse? topCause = null;
-    if (!string.IsNullOrWhiteSpace(latestEvent.TopResourceId) && latestEvent.TopIncreaseAmount is not null)
+    var latestByResource = metricsRows
+        .Where(x => x.Date == latestDate.Value)
+        .GroupBy(x => x.ResourceId)
+        .ToDictionary(group => group.Key, group => group.Sum(x => x.Cost), StringComparer.OrdinalIgnoreCase);
+    var previousByResource = metricsRows
+        .Where(x => x.Date == previousDate)
+        .GroupBy(x => x.ResourceId)
+        .ToDictionary(group => group.Key, group => group.Sum(x => x.Cost), StringComparer.OrdinalIgnoreCase);
+
+    string? topResourceId = null;
+    decimal? topIncrease = null;
+    foreach (var resourceId in latestByResource.Keys.Union(previousByResource.Keys, StringComparer.OrdinalIgnoreCase))
     {
-        topCause = new DashboardCauseResourceResponse(
-            ResourceId: latestEvent.TopResourceId,
-            ResourceName: latestEvent.TopResourceName ?? ParseResourceName(latestEvent.TopResourceId),
-            ResourceType: latestEvent.TopResourceType ?? ParseResourceType(latestEvent.TopResourceId),
-            IncreaseAmount: latestEvent.TopIncreaseAmount.Value);
+        var latestCost = latestByResource.TryGetValue(resourceId, out var latestCostValue) ? latestCostValue : 0m;
+        var previousCost = previousByResource.TryGetValue(resourceId, out var previousCostValue) ? previousCostValue : 0m;
+        var delta = latestCost - previousCost;
+        if (delta <= 0m)
+        {
+            continue;
+        }
+
+        if (topIncrease is null || delta > topIncrease.Value)
+        {
+            topIncrease = delta;
+            topResourceId = resourceId;
+        }
     }
 
-    var confidence = await CalculateConfidenceAsync(db, userId.Value, latestEvent.Date, cancellationToken);
+    if (!string.IsNullOrWhiteSpace(topResourceId) && topIncrease is not null)
+    {
+        topCause = new DashboardCauseResourceResponse(
+            ResourceId: topResourceId,
+            ResourceName: ParseResourceName(topResourceId),
+            ResourceType: ParseResourceType(topResourceId),
+            IncreaseAmount: decimal.Round(topIncrease.Value, 4));
+    }
+
+    var confidence = await CalculateConfidenceAsync(db, userId.Value, latestDate.Value, cancellationToken);
 
     var summary = new DashboardSummaryResponse(
-        Date: latestEvent.Date,
-        YesterdayTotal: latestEvent.TotalYesterday,
-        TodayTotal: latestEvent.TotalToday,
-        Difference: latestEvent.Difference,
-        Baseline: latestEvent.Baseline,
+        Date: latestDate.Value,
+        LatestDataDate: DateTime.SpecifyKind(latestDate.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+        YesterdayTotal: decimal.Round(previousTotal, 4),
+        TodayTotal: decimal.Round(latestTotal, 4),
+        Difference: decimal.Round(difference, 4),
+        Baseline: decimal.Round(baseline, 4),
         MonthToDateTotal: decimal.Round(monthToDateTotal, 4),
-        SpikeFlag: latestEvent.SpikeFlag,
+        SpikeFlag: spikeFlag,
         Confidence: confidence,
         TopCauseResource: topCause,
-        SuggestionText: string.IsNullOrWhiteSpace(latestEvent.SuggestionText)
-            ? (latestEvent.SpikeFlag ? "Spike detected. Review top cause resource." : "No spike detected today.")
-            : latestEvent.SuggestionText);
+        SuggestionText: spikeFlag
+            ? "Spike detected. Review top cause resource."
+            : "No spike detected today.");
 
     return Results.Ok(summary);
 });
@@ -411,11 +465,21 @@ dashboard.MapGet("/history", async (
     }
 
     var safeThreshold = threshold is null || threshold <= 0m ? 5m : threshold.Value;
-    var toDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-    var fromDate = toDate.AddDays(-6);
+    var currentDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    var toDate = await GetLatestCompleteBillingDateAsync(
+        db,
+        userId.Value,
+        currentDate,
+        cancellationToken);
+    if (toDate is null)
+    {
+        return Results.Ok(new List<DashboardHistoryItemResponse>());
+    }
+
+    var fromDate = toDate.Value.AddDays(-6);
     var loadFromDate = fromDate.AddDays(-7);
     var rows = await db.DailyCostResources.AsNoTracking()
-        .Where(x => x.UserId == userId.Value && x.Date >= loadFromDate && x.Date <= toDate)
+        .Where(x => x.UserId == userId.Value && x.Date >= loadFromDate && x.Date <= toDate.Value)
         .Select(x => new { x.Date, x.ResourceId, x.Cost })
         .ToListAsync(cancellationToken);
 
@@ -436,18 +500,18 @@ dashboard.MapGet("/history", async (
     var history = new List<DashboardHistoryItemResponse>();
     for (var offset = 0; offset < 7; offset++)
     {
-        var date = toDate.AddDays(-offset);
+        var date = toDate.Value.AddDays(-offset);
         var yesterdayDate = date.AddDays(-1);
         var totalToday = totalsByDate.TryGetValue(date, out var todayValue) ? todayValue : 0m;
         var totalYesterday = totalsByDate.TryGetValue(yesterdayDate, out var yesterdayValue) ? yesterdayValue : 0m;
         var difference = totalToday - totalYesterday;
 
-        var baselineValues = Enumerable.Range(1, 7)
+        List<decimal> baselineValues = Enumerable.Range(1, 7)
             .Select(daysBack => date.AddDays(-daysBack))
-            .Where(day => totalsByDate.TryGetValue(day, out _))
+            .Where(day => totalsByDate.ContainsKey(day))
             .Select(day => totalsByDate[day])
             .ToList();
-        var baseline = baselineValues.Count > 0 ? baselineValues.Average() : 0m;
+        var baseline = baselineValues.Count > 0 ? baselineValues.Sum() / baselineValues.Count : 0m;
         var spikeFlag = baseline > 0m
             && totalToday > baseline * 1.5m
             && difference > safeThreshold;
@@ -602,6 +666,35 @@ static bool IsAllowedFrontendOrigin(string? origin)
         || uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
 
     return isLoopbackHost && isHttp;
+}
+
+static async Task<DateOnly?> GetLatestCompleteBillingDateAsync(
+    AppDbContext db,
+    Guid userId,
+    DateOnly currentDate,
+    CancellationToken cancellationToken)
+{
+    var recentDates = await db.DailyCostResources.AsNoTracking()
+        .Where(x => x.UserId == userId)
+        .Select(x => x.Date)
+        .Distinct()
+        .OrderByDescending(x => x)
+        .Take(2)
+        .ToListAsync(cancellationToken);
+
+    if (recentDates.Count == 0)
+    {
+        return null;
+    }
+
+    var newestDate = recentDates[0];
+    var mayStillBeProcessing = newestDate >= currentDate.AddDays(-1);
+    if (mayStillBeProcessing && recentDates.Count > 1)
+    {
+        return recentDates[1];
+    }
+
+    return newestDate;
 }
 
 static string ResolveCurrency(IEnumerable<string> currencies)

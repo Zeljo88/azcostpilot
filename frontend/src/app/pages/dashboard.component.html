@@ -32,11 +32,11 @@
 
   <section class="metrics-grid">
     <article class="metric">
-      <h3>Yesterday Cost</h3>
+      <h3>Previous Day</h3>
       <p>{{ formatCurrency(vm.yesterdayTotal) }}</p>
     </article>
     <article class="metric">
-      <h3>Today Cost</h3>
+      <h3>Latest Cost</h3>
       <p>{{ formatCurrency(vm.todayTotal) }}</p>
     </article>
     <article class="metric">
@@ -62,6 +62,8 @@
       <p>{{ formatCurrency(vm.monthToDateTotal) }}</p>
     </article>
   </section>
+  <p class="subtitle">Based on latest available billing data.</p>
+  <p class="subtitle">Data date: {{ vm.latestDataDate | date: 'yyyy-MM-dd' }}</p>
 
   <section class="dev-scenarios">
     <h3>Development Scenarios</h3>
