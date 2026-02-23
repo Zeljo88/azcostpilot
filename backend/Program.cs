@@ -579,6 +579,9 @@ dashboard.MapGet("/waste-findings", async (ClaimsPrincipal principal, AppDbConte
             x.ResourceName,
             x.AzureSubscriptionId,
             x.EstimatedMonthlyCost,
+            x.Classification,
+            x.InactiveDurationDays,
+            x.WasteConfidenceLevel,
             x.DetectedAtUtc,
             x.Status))
         .ToListAsync(cancellationToken);

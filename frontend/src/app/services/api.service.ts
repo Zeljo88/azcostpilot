@@ -68,6 +68,9 @@ export interface DashboardWasteFinding {
   resourceName: string;
   azureSubscriptionId: string;
   estimatedMonthlyCost: number | null;
+  classification: string | null;
+  inactiveDurationDays: number | null;
+  wasteConfidenceLevel: 'High' | 'Medium' | 'Low' | string | null;
   detectedAtUtc: string;
   status: string;
 }
