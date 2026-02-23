@@ -20,7 +20,11 @@ import {
 export class DashboardComponent implements OnInit {
   readonly devScenarios: ReadonlyArray<{ key: string; label: string; description: string }> = [
     { key: 'normal', label: 'Normal Usage', description: 'Stable daily costs with realistic variance.' },
-    { key: 'spike', label: 'Spike', description: 'Sharp increase today, usually dominated by one resource.' },
+    {
+      key: 'spike',
+      label: 'Spike',
+      description: 'Sharp increase on the latest complete billing day, usually dominated by one resource.'
+    },
     {
       key: 'noisy_increases',
       label: 'Noisy Increases',

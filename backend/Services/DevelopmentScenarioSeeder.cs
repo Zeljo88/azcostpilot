@@ -198,21 +198,23 @@ public sealed class DevelopmentScenarioSeeder(
         ResourceTemplate template,
         Random random)
     {
-        if (date != toDate && date != toDate.AddDays(-3))
+        var latestCompleteDay = toDate.AddDays(-1);
+        var secondarySpikeDay = toDate.AddDays(-4);
+        if (date != latestCompleteDay && date != secondarySpikeDay)
         {
             return baseCost;
         }
 
         if (template.Key == "sql")
         {
-            var multiplier = date == toDate ? 4.8m : 3.1m;
-            var additive = date == toDate ? 15m : 7m;
+            var multiplier = date == latestCompleteDay ? 4.8m : 3.1m;
+            var additive = date == latestCompleteDay ? 15m : 7m;
             return baseCost * multiplier + additive;
         }
 
         if (template.Key == "monitor")
         {
-            return date == toDate ? baseCost * 1.7m : baseCost * 1.35m;
+            return date == latestCompleteDay ? baseCost * 1.7m : baseCost * 1.35m;
         }
 
         return baseCost * (1.05m + ((decimal)random.NextDouble() * 0.08m));
@@ -373,7 +375,7 @@ public sealed class DevelopmentScenarioSeeder(
         return scenario switch
         {
             "normal" => "Stable weekday/weekend pattern with normal variance.",
-            "spike" => "Today's SQL database cost has a sharp increase to trigger spike detection.",
+            "spike" => "Latest complete billing day has a sharp SQL cost increase to trigger spike detection.",
             "noisy_increases" => "Multiple resources increase together, producing a noisy upward trend.",
             "missing_data" => "Latest day is intentionally missing to simulate delayed or incomplete ingestion.",
             "idle_resources" => "Costs are near-zero and idle resource findings are created for savings tests.",
