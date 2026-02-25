@@ -33,18 +33,18 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Build and Push Worker Image
-      run: |
-        az config set extension.use_dynamic_install=yes_without_prompt
-        az acr build \
-          --registry $ACR_NAME \
-          --image $WORKER_IMAGE_REPO:${{ github.sha }} \
-          --file worker/Dockerfile \
-          .
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az acr build \
+            --registry $ACR_NAME \
+            --image $WORKER_IMAGE_REPO:${{ github.sha }} \
+            --file worker/Dockerfile \
+            .
 
       - name: Update Worker Job Image
-      run: |
-        az config set extension.use_dynamic_install=yes_without_prompt
-        az containerapp job update \
-          --resource-group $RESOURCE_GROUP \
-          --name $WORKER_JOB_NAME \
-          --image $ACR_NAME.azurecr.io/$WORKER_IMAGE_REPO:${{ github.sha }}
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az containerapp job update \
+            --resource-group $RESOURCE_GROUP \
+            --name $WORKER_JOB_NAME \
+            --image $ACR_NAME.azurecr.io/$WORKER_IMAGE_REPO:${{ github.sha }}
