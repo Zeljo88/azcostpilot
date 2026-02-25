@@ -15,10 +15,14 @@ public class Worker(
     private readonly IWasteFindingService _wasteFindingService = wasteFindingService;
     private readonly ISpikeEmailNotificationService _spikeEmailNotificationService = spikeEmailNotificationService;
     private readonly TimeSpan _runInterval = TimeSpan.FromHours(Math.Max(1, configuration.GetValue<int?>("Worker:RunIntervalHours") ?? 24));
+    private readonly bool _runOnce = configuration.GetValue<bool?>("Worker:RunOnce") ?? false;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Cost worker started. Run interval: {Hours} hour(s).", _runInterval.TotalHours);
+        _logger.LogInformation(
+            "Cost worker started. Run interval: {Hours} hour(s). Run once: {RunOnce}.",
+            _runInterval.TotalHours,
+            _runOnce);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -38,6 +42,12 @@ public class Worker(
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Worker ingestion run failed.");
+            }
+
+            if (_runOnce)
+            {
+                _logger.LogInformation("RunOnce enabled. Exiting worker after single execution.");
+                break;
             }
 
             await Task.Delay(_runInterval, stoppingToken);
