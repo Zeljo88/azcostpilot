@@ -8,12 +8,14 @@ public class Worker(
     ICostSyncService costSyncService,
     IWasteFindingService wasteFindingService,
     ISpikeEmailNotificationService spikeEmailNotificationService,
+    IHostApplicationLifetime hostApplicationLifetime,
     IConfiguration configuration) : BackgroundService
 {
     private readonly ILogger<Worker> _logger = logger;
     private readonly ICostSyncService _costSyncService = costSyncService;
     private readonly IWasteFindingService _wasteFindingService = wasteFindingService;
     private readonly ISpikeEmailNotificationService _spikeEmailNotificationService = spikeEmailNotificationService;
+    private readonly IHostApplicationLifetime _hostApplicationLifetime = hostApplicationLifetime;
     private readonly TimeSpan _runInterval = TimeSpan.FromHours(Math.Max(1, configuration.GetValue<int?>("Worker:RunIntervalHours") ?? 24));
     private readonly bool _runOnce = configuration.GetValue<bool?>("Worker:RunOnce") ?? false;
 
@@ -47,6 +49,7 @@ public class Worker(
             if (_runOnce)
             {
                 _logger.LogInformation("RunOnce enabled. Exiting worker after single execution.");
+                _hostApplicationLifetime.StopApplication();
                 break;
             }
 
